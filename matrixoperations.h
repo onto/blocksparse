@@ -8,90 +8,26 @@
 #include <sparsematrix.h>
 #include <blockmatrix.h>
 #include <matrix.h>
+#include <matrixcontainers.h>
 
-
-template <typename T> struct LUPS;
-template <typename T> struct LUPM;
-
-template <typename T>
-struct LUPS
-{
-    SparseMatrix<T> U;
-    std::vector<size_t> LF;
-    std::vector<size_t> P;
-
-    void printL() const
-    {
-        for (size_t i = 1; i <= U.H; ++i)
-        {
-            size_t j = 1, jj;
-            for (size_t q = LF[i]; q != SPARSE_END; q = U.N[q])
-            {
-                jj = U.C[q];
-                while (j < jj) { std::cout << "0" << '\t'; ++j; }
-                std::cout << U.V[q] << '\t'; ++j;
-            }
-            while (j <= U.W) { std::cout << "0" << '\t'; ++j; }
-            std::cout << ";\n";
-        }
-    }
-
-    void printU() const
-    {
-        U.print();
-    }
-};
-
-template <typename T>
-struct LUPM
-{
-    Matrix<T> M;
-    std::vector<size_t> P;
-
-    void printL() const
-    {
-        for (size_t i = 1; i <= M.H; ++i)
-        {
-            for (size_t j = 1; j < i; ++j)
-                std::cout << M.get(i,j) << '\t';
-            for (size_t j = i; j <= M.H; ++j)
-                std::cout << "*\t";
-            std::cout << '\n';
-        }
-    }
-
-    void printU() const
-    {
-        for (size_t i = 1; i <= M.H; ++i)
-        {
-            for (size_t j = 1; j < i; ++j)
-                std::cout << "*\t";
-            for (size_t j = i; j <= M.H; ++j)
-                std::cout << M.get(i,j) << '\t';
-            std::cout << '\n';
-        }
-    }
-};
-
-template <typename T>
 class MatrixOperations
 {
 public:
-    static bool LUTriang(SparseMatrix<T> &M, LUPS<T> &_M, double pivRel = 0.001);
-    static bool LUTriang(Matrix<T> &M, LUPM<T> &_M);
+    static bool LUTriang(SparseMatrix &M, LUPS &_M, double pivRel = 0.001);
+    static bool LUTriang(Matrix &M, LUPM &_M);
 
-    static bool Solve(LUPS<T> &M, Vector<T> &B, Vector<T> &X);
-    static bool Solve(LUPM<T> &M, Vector<T> &B, Vector<T> &X);
+    static bool Solve(LUPS &M, Vector &B, Vector &X);
+    static bool Solve(LUPM &M, Vector &B, Vector &X);
 
-    static bool Inverse(SparseMatrix<T> &M, Matrix<T> &_M);
-    static bool Inverse(Matrix<T> &M, Matrix<T> &_M);
+    static bool Inverse(SparseMatrix &M, Matrix &_M);
+    static bool Inverse(Matrix &M, Matrix &_M);
 
-    static bool BlockMatrixFactorization(BlockSparseMatrix<T> &M, FactorizedBlockSparseMatrix<T> &_M);
-    static bool Solve(FactorizedBlockSparseMatrix<T> &M, Vector<T> &B, Vector<T> &X);
+    static bool BlockMatrixFactorization(BlockSparseMatrix &M, FactorizedBlockSparseMatrix &_M);
+    static bool Solve(FactorizedBlockSparseMatrix &M, Vector &B, Vector &X);
 };
 
-template <typename T>
-bool MatrixOperations<T>::LUTriang(SparseMatrix<T> &M, LUPS<T> &_M, double pivRel)
+
+bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
 {
     // Матрицы L и U храним в одной _M.U, но _M.U.F будет означать начало U,
     // а _M.LF будет означать начало L.
@@ -103,16 +39,13 @@ bool MatrixOperations<T>::LUTriang(SparseMatrix<T> &M, LUPS<T> &_M, double pivRe
     _M.U = M;
     _M.LF.assign(H+1, SPARSE_END);
     _M.P.resize(H+H+1);
-    for (size_t i = 1; i <= H; ++i) _M.P[i] = i;
-    for (size_t i = 1; i <= H; ++i) _M.P[H+i] = i;
+    for (size_t i = 1; i <= H; ++i) _M.P[i] = _M.P[H+i] = i;
+
+    std::vector<size_t> *F = &_M.U.F;
 
     // Массив "указателей" на последний элемент матрицы L, чтобы можно было
     // в неё переносить элементы из U
     std::vector<size_t> LE(H+1, SPARSE_END);
-
-//    size_t *N = &(_M.U.N[0]), *C = &(_M.U.C[0]), *F = &(_M.U.F[0]),
-//            *P = &(_M.P[0]), *LF = &(_M.LF[0]);
-//    T *V = &(_M.U.V[0]);
 
     std::vector<size_t> Rfill, Cfill;
 
@@ -163,12 +96,6 @@ bool MatrixOperations<T>::LUTriang(SparseMatrix<T> &M, LUPS<T> &_M, double pivRe
             }
         }
 
-//        std::cout << "BEFORE SWAP\n";
-//        _M.printL();
-//        std::cout << '\n';
-//        _M.printU();
-//        std::cout << '\n';
-
         // Перестановки строк и столбцов
         // при этом перестановки столбцов U не меняют матрицу L
         size_t t;
@@ -185,16 +112,10 @@ bool MatrixOperations<T>::LUTriang(SparseMatrix<T> &M, LUPS<T> &_M, double pivRe
             t = _M.P[H+optj]; _M.P[H+optj] = _M.P[H+k]; _M.P[H+k] = t;
         }
 
-//        std::cout << "SWAP\n";
-//        _M.printL();
-//        std::cout << '\n';
-//        _M.printU();
-//        std::cout << '\n';
-
         std::vector<size_t> kJ;
-        std::vector<T> kV;
+        std::vector<double> kV;
 
-        T diag = _M.U.V[_M.U.F[k]];
+        double diag = _M.U.V[_M.U.F[k]];
 
         // Преобразуем строку в U
         // и запомним столбцовые индексы и значения в строке
@@ -214,7 +135,7 @@ bool MatrixOperations<T>::LUTriang(SparseMatrix<T> &M, LUPS<T> &_M, double pivRe
             size_t p = _M.U.F[i];
             size_t q = _M.U.N[p];
 
-            T bdiag = _M.U.V[p];
+            double bdiag = _M.U.V[p];
 
             _M.U.V[p] /= diag;
 
@@ -270,8 +191,8 @@ bool MatrixOperations<T>::LUTriang(SparseMatrix<T> &M, LUPS<T> &_M, double pivRe
     return true;
 }
 
-template <typename T>
-bool MatrixOperations<T>::Solve(LUPS<T> &_M, Vector<T> &B, Vector<T> &X)
+
+bool MatrixOperations::Solve(LUPS &_M, Vector &B, Vector &X)
 {
     size_t H = _M.U.H;
 
@@ -296,7 +217,7 @@ bool MatrixOperations<T>::Solve(LUPS<T> &_M, Vector<T> &B, Vector<T> &X)
     // Обратный ход U*(Pc*x)=y
     for (size_t i = H; i >= 1; --i)
     {
-        T diag = _M.U.V[_M.U.F[i]];
+        double diag = _M.U.V[_M.U.F[i]];
         for (size_t q = _M.U.N[_M.U.F[i]]; q != SPARSE_END; q = _M.U.N[q])
         {
             X.V[i] -= _M.U.V[q]*X.V[_M.U.C[q]];
@@ -310,18 +231,18 @@ bool MatrixOperations<T>::Solve(LUPS<T> &_M, Vector<T> &B, Vector<T> &X)
     return true;
 }
 
-template <typename T>
-bool MatrixOperations<T>::Inverse(SparseMatrix<T> &M, Matrix<T> &_M)
+
+bool MatrixOperations::Inverse(SparseMatrix &M, Matrix &_M)
 {
-    LUPS<T> LU;
+    LUPS LU;
     if (!LUTriang(M, LU)) return false;
 
     size_t H = M.H;
 
-    _M = Matrix<T>(H);
+    _M = Matrix(H);
 
-    Vector<T> B(H);
-    Vector<T> X;
+    Vector B(H);
+    Vector X;
 
     // решаем систему LUP * _M = E;
     for (size_t i = 1; i <= H; ++i)
@@ -339,8 +260,8 @@ bool MatrixOperations<T>::Inverse(SparseMatrix<T> &M, Matrix<T> &_M)
     return true;
 }
 
-template <typename T>
-bool MatrixOperations<T>::LUTriang(Matrix<T> &M, LUPM<T> &_M)
+
+bool MatrixOperations::LUTriang(Matrix &M, LUPM &_M)
 {
     if (M.H != M.W) return false;
 
@@ -382,13 +303,13 @@ bool MatrixOperations<T>::LUTriang(Matrix<T> &M, LUPM<T> &_M)
             t = _M.P[H+optj]; _M.P[H+optj] = _M.P[H+k]; _M.P[H+k] = t;
         }
 
-        T diag = _M.M.get(k,k);
+        double diag = _M.M.get(k,k);
 
 #pragma omp parallel for
         for (size_t i = k+1; i <= H; ++i)
         {
             _M.M.M[H*(i-1)+k] /= diag;
-            T nbdiag = _M.M.M[H*(i-1)+k];
+            double nbdiag = _M.M.M[H*(i-1)+k];
             for (size_t j = k+1; j <= H; ++j)
             {
                 _M.M.M[H*(i-1)+j] -= _M.M.M[H*(k-1)+j] * nbdiag;
@@ -400,8 +321,8 @@ bool MatrixOperations<T>::LUTriang(Matrix<T> &M, LUPM<T> &_M)
     return true;
 }
 
-template <typename T>
-bool MatrixOperations<T>::Solve(LUPM<T> &_M, Vector<T> &B, Vector<T> &X)
+
+bool MatrixOperations::Solve(LUPM &_M, Vector &B, Vector &X)
 {
     size_t H = _M.M.H;
 
@@ -426,7 +347,7 @@ bool MatrixOperations<T>::Solve(LUPM<T> &_M, Vector<T> &B, Vector<T> &X)
     // Обратный ход U*(Pc*x)=y
     for (size_t i = H; i >= 1; --i)
     {
-        T diag = _M.M.M[H*(i-1)+i];
+        double diag = _M.M.get(i, i);
         for (size_t j = i+1; j <= H; ++j)
         {
             X.V[i] -= _M.M.M[H*(i-1)+j]*X.V[j];
@@ -434,29 +355,27 @@ bool MatrixOperations<T>::Solve(LUPM<T> &_M, Vector<T> &B, Vector<T> &X)
         X.V[i] /= diag;
     }
 
-    std::vector<T> XX = X.V;
+    std::vector<double> XX = X.V;
     for (size_t i = 1; i <= H; ++i) X.V[i] = XX[P[i]];
 
     return true;
 }
 
-template <typename T>
-bool MatrixOperations<T>::Inverse(Matrix<T> &M, Matrix<T> &_M)
+
+bool MatrixOperations::Inverse(Matrix &M, Matrix &_M)
 {
-    LUPM<T> LU;
+    LUPM LU;
     if (!LUTriang(M, LU)) return false;
 
     size_t H = M.H;
 
-    _M = Matrix<T>(H);
+    _M = Matrix(H);
 
-    Vector<T> B(H);
-    Vector<T> X;
+    Vector B(H);
+    Vector X;
 
-    // решаем систему LUP * _M = E;
     for (size_t i = 1; i <= H; ++i)
     {
-
         B.V[i-1] = 0;
         B.V[i] = 1.0;
 
@@ -464,13 +383,12 @@ bool MatrixOperations<T>::Inverse(Matrix<T> &M, Matrix<T> &_M)
 
         for (size_t j = 1; j <= H; ++j)
             _M.set(j, i, X.V[j]);
-        //memcpy(&(_M.M[1+H*(i-1)]),&(X[1]),sizeof(T)*H);
     }
     return true;
 }
 
-template <typename T>
-bool MatrixOperations<T>::BlockMatrixFactorization(BlockSparseMatrix<T> &M, FactorizedBlockSparseMatrix<T> &_M)
+
+bool MatrixOperations::BlockMatrixFactorization(BlockSparseMatrix &M, FactorizedBlockSparseMatrix &_M)
 {
 
     _M.B = M.B;
@@ -482,14 +400,14 @@ bool MatrixOperations<T>::BlockMatrixFactorization(BlockSparseMatrix<T> &M, Fact
 
     // Инвертируем A_i
     _M.Ainv.resize(N);
-    #pragma omp parallel for
+#pragma omp parallel for
     for (size_t i = 0; i < N; ++i)
     {
         Inverse(M.A[i], _M.Ainv[i]);
     }
 
     // Считаем матрицу H
-    Matrix<T> H(_M.R.back());
+    Matrix H(_M.R.back());
     for (size_t i = 0; i < N; ++i)
     {
         H -= _M.C[i]*_M.Ainv[i]*_M.B[i];
@@ -502,11 +420,11 @@ bool MatrixOperations<T>::BlockMatrixFactorization(BlockSparseMatrix<T> &M, Fact
     return true;
 }
 
-template <typename T>
-bool MatrixOperations<T>::Solve(FactorizedBlockSparseMatrix<T> &M, Vector<T> &B, Vector<T> &X)
+
+bool MatrixOperations::Solve(FactorizedBlockSparseMatrix &M, Vector &B, Vector &X)
 {
 
-    std::vector< Vector<T> >b;
+    std::vector< Vector >b;
 
     size_t N = M.R.size()-1;
 
@@ -520,35 +438,35 @@ bool MatrixOperations<T>::Solve(FactorizedBlockSparseMatrix<T> &M, Vector<T> &B,
     qI[N+1] = q;
 
     b.resize(N+1);
-    #pragma omp parallel for
+#pragma omp parallel for
     for (size_t i = 0; i <= N; ++i)
     {
-        std::vector<T> t;
+        std::vector<double> t;
         t.assign(B.V.begin()+qI[i], B.V.begin()+qI[i+1]);
         t.insert(t.begin(), 0);
         b[i].H = M.R[i];
         b[i].V = t;
     }
 
-    X = Vector<T>(B.H);
+    X = Vector(B.H);
 
-    Vector<T> v = b.back();
+    Vector v = b.back();
     for (size_t i = 0; i < N; ++i)
     {
         v -= M.C[i]*(M.Ainv[i]*b[i]);
     }
 
-    Vector<T> X_q;
+    Vector X_q;
     if (!Solve(M.H, v, X_q)) return false;
 
     for (size_t i = 0; i < N; ++i)
     {
-        Vector<T> X_i = M.Ainv[i]*(b[i]-M.B[i]*X_q);
-        memcpy(&(X.V[qI[i]]),&(X_i.V[1]),M.R[i]*sizeof(T));
+        Vector X_i = M.Ainv[i]*(b[i]-M.B[i]*X_q);
+        memcpy(&(X.V[qI[i]]),&(X_i.V[1]),M.R[i]*sizeof(double));
     }
 
     q = qI[N];
-    memcpy(&(X.V[q]),&(X_q.V[1]),M.R.back()*sizeof(T));
+    memcpy(&(X.V[q]),&(X_q.V[1]),M.R.back()*sizeof(double));
 
     return true;
 }

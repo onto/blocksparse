@@ -11,18 +11,15 @@
 
 #define SPARSE_END 0
 
-template <typename T> class SparseMatrix;
-
-template <typename T>
 class SparseMatrix
 {
 public:
     SparseMatrix();
     SparseMatrix(size_t h, size_t w);
-    SparseMatrix(const SparseMatrix<T> &S);
+    SparseMatrix(const SparseMatrix &S);
     SparseMatrix(const char *file);
 
-    std::vector<T> V;       //values
+    std::vector<double> V;       //values
     std::vector<size_t> N;  //next in row
     std::vector<size_t> C;  //column
     std::vector<size_t> F;  //first in row
@@ -30,10 +27,10 @@ public:
     size_t W; //width
     size_t H; //height
 
-    void set(size_t row, size_t col, T value);
-    T    get(size_t row, size_t col) const;
+    void set(size_t row, size_t col, double value);
+    double    get(size_t row, size_t col) const;
     void rm(size_t row, size_t col);
-    void add(size_t row, size_t col, T value);
+    void add(size_t row, size_t col, double value);
 
     void swapCol(size_t c1, size_t c2);
     void swapRow(size_t r1, size_t r2);
@@ -42,55 +39,48 @@ public:
     void save2file(const char *file) const;
     void save2fileold(const char *file) const;
 
-    template <typename TT>
-    friend Matrix<TT> operator *(const SparseMatrix<TT> &S, const Matrix<TT> &M);
-    template <typename TT>
-    friend Matrix<TT> operator *(const Matrix<TT> &M, const SparseMatrix<TT> &S);
-    template <typename TT>
-    friend Vector<TT> operator *(const SparseMatrix<TT> &S, const Vector<TT> &V);
 
-    template <typename TT>
-    friend Matrix<TT> operator +(const SparseMatrix<TT> &S, const Matrix<TT> &M);
-    template <typename TT>
-    friend Matrix<TT> operator +(const Matrix<TT> &M, const SparseMatrix<TT> &S);
+    friend Matrix operator *(const SparseMatrix &S, const Matrix &M);
+    friend Matrix operator *(const Matrix &M, const SparseMatrix &S);
+    friend Vector operator *(const SparseMatrix &S, const Vector &V);
 
-    template <typename TT>
-    friend Matrix<TT>& operator +=(Matrix<TT> &M, const SparseMatrix<TT> &S);
+    friend Matrix operator +(const SparseMatrix &S, const Matrix &M);
+    friend Matrix operator +(const Matrix &M, const SparseMatrix &S);
 
-    template <typename TT>
-    friend Matrix<TT> operator -(const SparseMatrix<TT> &S, const Matrix<TT> &M);
-    template <typename TT>
-    friend Matrix<TT> operator -(const Matrix<TT> &M, const SparseMatrix<TT> &S);
+    friend Matrix& operator +=(Matrix &M, const SparseMatrix &S);
+
+    friend Matrix operator -(const SparseMatrix &S, const Matrix &M);
+    friend Matrix operator -(const Matrix &M, const SparseMatrix &S);
 
 };
 
 
-template <typename T>
-SparseMatrix<T>::SparseMatrix()
+
+SparseMatrix::SparseMatrix()
 {
     H = 0;
     W = 0;
 
     F.push_back(SPARSE_END);
-    V.push_back(T());
+    V.push_back(0);
     C.push_back(0);
     N.push_back(SPARSE_END);
 }
 
-template <typename T>
-SparseMatrix<T>::SparseMatrix(size_t h, size_t w)
+
+SparseMatrix::SparseMatrix(size_t h, size_t w)
 {
     H = h;
     W = w;
 
     F.assign(h+1, SPARSE_END);
-    V.push_back(T());
+    V.push_back(0);
     C.push_back(0);
     N.push_back(SPARSE_END);
 }
 
-template <typename T>
-SparseMatrix<T>::SparseMatrix(const SparseMatrix<T> &S)
+
+SparseMatrix::SparseMatrix(const SparseMatrix &S)
 {
     V = S.V;
     N = S.N;
@@ -100,20 +90,20 @@ SparseMatrix<T>::SparseMatrix(const SparseMatrix<T> &S)
     W = S.W;
 }
 
-template <typename T>
-SparseMatrix<T>::SparseMatrix(const char *file) {
+
+SparseMatrix::SparseMatrix(const char *file) {
 
     std::ifstream in(file);
 
     in >> H >> W;
 
-    V.push_back(T());
+    V.push_back(0);
     C.push_back(0);
     N.push_back(SPARSE_END);
 
     F.assign(H+1, SPARSE_END);
 
-    T x;
+    double x;
     size_t c;
 
     for (size_t r = 1; r <= H; ++r)
@@ -134,8 +124,8 @@ SparseMatrix<T>::SparseMatrix(const char *file) {
     in.close();
 }
 
-template <typename T>
-void SparseMatrix<T>::set(size_t row, size_t col, T value)
+
+void SparseMatrix::set(size_t row, size_t col, double value)
 {
 
     if ((row > H) || (col > W)) return;
@@ -165,10 +155,10 @@ void SparseMatrix<T>::set(size_t row, size_t col, T value)
         N[p] = V.size() - 1;
 }
 
-template <typename T>
-T SparseMatrix<T>::get(size_t row, size_t col) const
+
+double SparseMatrix::get(size_t row, size_t col) const
 {
-    if ((row > H) || (col > W)) return T();
+    if ((row > H) || (col > W)) return 0;
 
     size_t j;
 
@@ -177,13 +167,13 @@ T SparseMatrix<T>::get(size_t row, size_t col) const
         j = C[q];
         if (j < col) continue;
         if (j == col) return V[q];
-        if (j > col) return T(0);
+        if (j > col) return 0;
     }
-    return T(0);
+    return 0;
 }
 
-template <typename T>
-void SparseMatrix<T>::add(size_t row, size_t col, T value)
+
+void SparseMatrix::add(size_t row, size_t col, double value)
 {
     int q = N.size();
     C.push_back(col);
@@ -195,14 +185,14 @@ void SparseMatrix<T>::add(size_t row, size_t col, T value)
         N[q-1] = q;
 }
 
-template <typename T>
-void SparseMatrix<T>::swapRow(size_t r1, size_t r2)
+
+void SparseMatrix::swapRow(size_t r1, size_t r2)
 {
     size_t t = F[r1]; F[r1] = F[r2]; F[r2] = t;
 }
 
-template <typename T>
-void SparseMatrix<T>::swapCol(size_t c1, size_t c2)
+
+void SparseMatrix::swapCol(size_t c1, size_t c2)
 {
 
     for (size_t i = 1; i <= H; ++i)
@@ -225,7 +215,7 @@ void SparseMatrix<T>::swapCol(size_t c1, size_t c2)
 
         if (f1 && f2)
         {
-            T t = V[q1];
+            double t = V[q1];
             V[q1] = V[q2];
             V[q2] = t;
         }
@@ -274,8 +264,8 @@ void SparseMatrix<T>::swapCol(size_t c1, size_t c2)
     }
 }
 
-template <typename T>
-void SparseMatrix<T>::print() const
+
+void SparseMatrix::print() const
 {
     for (size_t i = 1; i <= H; ++i)
     {
@@ -291,8 +281,8 @@ void SparseMatrix<T>::print() const
     }
 }
 
-template <typename T>
-void SparseMatrix<T>::save2file(const char *file) const
+
+void SparseMatrix::save2file(const char *file) const
 {
     std::ofstream out(file);
 
@@ -308,8 +298,8 @@ void SparseMatrix<T>::save2file(const char *file) const
     }
 }
 
-template <typename T>
-void SparseMatrix<T>::save2fileold(const char *file) const
+
+void SparseMatrix::save2fileold(const char *file) const
 {
     std::ofstream out(file);
 
@@ -325,15 +315,15 @@ void SparseMatrix<T>::save2fileold(const char *file) const
     }
 }
 
-template <typename T>
-Matrix<T> operator *(const SparseMatrix<T> &S, const Matrix<T> &M)
+
+Matrix operator *(const SparseMatrix &S, const Matrix &M)
 {
     if (S.W != M.H) {} // надо бы бросить исключение
 
     size_t j;
-    T v;
+    double v;
 
-    Matrix<T> OM(S.H,M.W);
+    Matrix OM(S.H,M.W);
 
 #pragma omp parallel for private(j, v)
     for (size_t i = 1; i <= OM.H; ++i)
@@ -353,15 +343,15 @@ Matrix<T> operator *(const SparseMatrix<T> &S, const Matrix<T> &M)
     return OM;
 }
 
-template <typename T>
-Matrix<T> operator *(const Matrix<T> &M, const SparseMatrix<T> &S)
+
+Matrix operator *(const Matrix &M, const SparseMatrix &S)
 {
     if (M.W != S.H) {} // надо бы бросить исключение
 
     size_t j;
-    T v;
+    double v;
 
-    Matrix<T> OM(M.H,S.W);
+    Matrix OM(M.H,S.W);
 #pragma omp parallel for private(j, v)
     for (size_t i = 1; i <= M.W; ++i)
     {
@@ -380,14 +370,14 @@ Matrix<T> operator *(const Matrix<T> &M, const SparseMatrix<T> &S)
     return OM;
 }
 
-template <typename TT>
-Vector<TT> operator *(const SparseMatrix<TT> &S, const Vector<TT> &V)
+
+Vector operator *(const SparseMatrix &S, const Vector &V)
 {
     if (S.W != V.H) {} // надо бы бросить исключение
 
-    Vector<TT> OV(S.H);
+    Vector OV(S.H);
 
-    #pragma omp parallel for
+#pragma omp parallel for
     for (size_t i = 1; i <= S.H; ++i)
         for (size_t q = S.F[i]; q != SPARSE_END; q = S.N[q])
             OV.V[i] += S.V[q] * V.V[S.C[q]];
@@ -395,14 +385,14 @@ Vector<TT> operator *(const SparseMatrix<TT> &S, const Vector<TT> &V)
     return OV;
 }
 
-template <typename TT>
-Matrix<TT> operator +(const SparseMatrix<TT> &S, const Matrix<TT> &M)
+
+Matrix operator +(const SparseMatrix &S, const Matrix &M)
 {
     if ((S.H != M.H) || (S.W != M.W)) {} // надо бы бросить исключение
 
-    Matrix<TT> OM(M);
+    Matrix OM(M);
 
-    #pragma omp parallel for
+#pragma omp parallel for
     for (size_t i = 1; i <= S.H; ++i)
         for (size_t q = S.F[i]; q != SPARSE_END; q = S.N[q])
             OM.M[OM.W*(i-1)+S.C[q]] += S.V[q];
@@ -410,18 +400,18 @@ Matrix<TT> operator +(const SparseMatrix<TT> &S, const Matrix<TT> &M)
     return OM;
 }
 
-template <typename TT>
-Matrix<TT> operator +(const Matrix<TT> &M, const SparseMatrix<TT> &S)
+
+Matrix operator +(const Matrix &M, const SparseMatrix &S)
 {
     return S + M;
 }
 
-template <typename TT>
-Matrix<TT>& operator +=(Matrix<TT> &M, const SparseMatrix<TT> &S)
+
+Matrix& operator +=(Matrix &M, const SparseMatrix &S)
 {
     if ((S.H != M.H) || (S.W != M.W)) {} // надо бы бросить исключение
 
-    #pragma omp parallel for
+#pragma omp parallel for
     for (size_t i = 1; i <= S.H; ++i)
         for (size_t q = S.F[i]; q != SPARSE_END; q = S.N[q])
             M.M[M.W*(i-1)+S.C[q]] += S.V[q];
@@ -430,17 +420,17 @@ Matrix<TT>& operator +=(Matrix<TT> &M, const SparseMatrix<TT> &S)
 }
 
 
-template <typename TT>
-Matrix<TT> operator -(const SparseMatrix<TT> &S, const Matrix<TT> &M)
+
+Matrix operator -(const SparseMatrix &S, const Matrix &M)
 {
     if ((S.H != M.H) || (S.W != M.W)) {} // надо бы бросить исключение
 
-    Matrix<TT> OM(M);
+    Matrix OM(M);
 
-    #pragma omp parallel for
+#pragma omp parallel for
     for (size_t i = 1; i < OM.M.size(); ++i) OM.M[i] = -OM.M[i];
 
-    #pragma omp parallel for
+#pragma omp parallel for
     for (size_t i = 1; i <= S.H; ++i)
         for (size_t q = S.F[i]; q != SPARSE_END; q = S.N[q])
             OM.M[OM.W*(i-1)+S.C[q]] += S.V[q];
@@ -448,14 +438,14 @@ Matrix<TT> operator -(const SparseMatrix<TT> &S, const Matrix<TT> &M)
     return OM;
 }
 
-template <typename TT>
-Matrix<TT> operator -(const Matrix<TT> &M, const SparseMatrix<TT> &S)
+
+Matrix operator -(const Matrix &M, const SparseMatrix &S)
 {
     if ((S.H != M.H) || (S.W != M.W)) {} // надо бы бросить исключение
 
-    Matrix<TT> OM(M);
+    Matrix OM(M);
 
-    #pragma omp parallel for
+#pragma omp parallel for
     for (size_t i = 1; i <= S.H; ++i)
         for (size_t q = S.F[i]; q != SPARSE_END; q = S.N[q])
             OM.M[OM.W*(i-1)+S.C[q]] -= S.V[q];

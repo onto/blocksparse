@@ -9,14 +9,12 @@
 #include <sparsematrix.h>
 #include <matrix.h>
 
-template <typename T> struct LUPM;
-
-template <typename T> struct BlockSparseMatrix
+struct BlockSparseMatrix
 {
-    std::vector< SparseMatrix<T> > A;   // A_i - r_i x r_i
-    std::vector< SparseMatrix<T> > B;   // B_i - r_i x r_q
-    std::vector< SparseMatrix<T> > C;   // C_i - r_q x r_i
-    SparseMatrix<T> Q;                  // Q - r_q x r_q
+    std::vector< SparseMatrix > A;   // A_i - r_i x r_i
+    std::vector< SparseMatrix > B;   // B_i - r_i x r_q
+    std::vector< SparseMatrix > C;   // C_i - r_q x r_i
+    SparseMatrix Q;                  // Q - r_q x r_q
     std::vector<size_t> R;              // r_1--r_q
 
     BlockSparseMatrix(const char *file)
@@ -35,15 +33,15 @@ template <typename T> struct BlockSparseMatrix
                 break;
         }
 
-        T x;
+        double x;
         size_t j;
 
         size_t q = 0, q1 = N - R.back();
         for (size_t k = 0; k < R.size()-1; ++k)
         {
-            A.push_back(SparseMatrix<T>(R[k], R[k]));
-            B.push_back(SparseMatrix<T>(R[k], R.back()));
-            C.push_back(SparseMatrix<T>(R.back(), R[k]));
+            A.push_back(SparseMatrix(R[k], R[k]));
+            B.push_back(SparseMatrix(R[k], R.back()));
+            C.push_back(SparseMatrix(R.back(), R[k]));
             for (size_t i = 1; i <= R[k]; ++i)
             {
                 in >> j;
@@ -60,7 +58,7 @@ template <typename T> struct BlockSparseMatrix
             q += R[k];
         }
 
-        Q = SparseMatrix<T>(R.back(), R.back());
+        Q = SparseMatrix(R.back(), R.back());
 
         for (size_t i = 1; i <= R.back(); ++i)
         {
@@ -91,16 +89,6 @@ template <typename T> struct BlockSparseMatrix
 
         in.close();
     }
-};
-
-template <typename T> struct FactorizedBlockSparseMatrix
-{
-    std::vector< Matrix<T> > Ainv;      // Ainv_i = inv(A_i)
-    std::vector< SparseMatrix<T> > B;   // B_i - r_i x r_q
-    std::vector< SparseMatrix<T> > C;   // C_i - r_q x r_i
-    SparseMatrix<T> Q;                  // Q - r_q x r_q
-    LUPM<T> H;                          // H = LUTriang(Q - sum(C_i * Ainv_i * B_i))
-    std::vector<size_t> R;              // r_1--r_q
 };
 
 #endif // BLOCKMATRIX_H

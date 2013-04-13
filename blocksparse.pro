@@ -9,9 +9,9 @@ HEADERS += \
     sparsematrix.h \
     matrix.h \
     blockmatrix.h \
-    matrixoperations.h
+    matrixoperations.h \
+    matrixcontainers.h
 
 QMAKE_CXXFLAGS += -fopenmp
 QMAKE_LFLAGS += -fopenmp
-
 

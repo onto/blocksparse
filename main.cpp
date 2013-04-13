@@ -22,39 +22,39 @@ int main(int argc, char *argv[3])
 
     if (type == 1)
     {
-        SparseMatrix<double> M("matrix_s.txt");
-        Vector<double> B("vector.txt");
+        SparseMatrix M("matrix_s.txt");
+        Vector B("vector.txt");
 
         cout << M.N.size()-1 << endl;
 
-        LUPS<double> T;
+        LUPS T;
 
-        MatrixOperations<double>::LUTriang(M, T);
+        MatrixOperations::LUTriang(M, T);
 
-        Vector<double> X;
-        MatrixOperations<double>::Solve(T, B, X);
+        Vector X;
+        MatrixOperations::Solve(T, B, X);
 
         //X.print();
     }
     else
     {
-        BlockSparseMatrix<double> M1("matrix_b.txt");
-        Vector<double> B("vector.txt");
+        BlockSparseMatrix M1("matrix_b.txt");
+        Vector B("vector.txt");
 
 #ifdef _OPENMP
     omp_set_num_threads(threads);
     double t = omp_get_wtime();
 #endif
-        FactorizedBlockSparseMatrix<double> FM;
+        FactorizedBlockSparseMatrix FM;
 
-        MatrixOperations<double>::BlockMatrixFactorization(M1, FM);
+        MatrixOperations::BlockMatrixFactorization(M1, FM);
 #ifdef _OPENMP
     t = omp_get_wtime() - t;
     cout << "Время на разложение " << t << endl;
     t = omp_get_wtime();
 #endif
-        Vector<double> X;
-        MatrixOperations<double>::Solve(FM, B, X);
+        Vector X;
+        MatrixOperations::Solve(FM, B, X);
 
 #ifdef _OPENMP
     t = omp_get_wtime() - t;
