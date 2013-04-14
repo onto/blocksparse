@@ -22,7 +22,8 @@ public:
     static bool Inverse(SparseMatrix &M, Matrix &_M);
     static bool Inverse(Matrix &M, Matrix &_M);
 
-    static bool BlockMatrixFactorization(BlockSparseMatrix &M, FactorizedBlockSparseMatrix &_M);
+    static bool BlockMatrixFactorization(BlockSparseMatrix &M,
+                                         FactorizedBlockSparseMatrix &_M);
     static bool Solve(FactorizedBlockSparseMatrix &M, Vector &B, Vector &X);
 };
 
@@ -41,18 +42,16 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
     _M.P.resize(H+H+1);
     for (size_t i = 1; i <= H; ++i) _M.P[i] = _M.P[H+i] = i;
 
-    std::vector<size_t> *F = &_M.U.F;
-
     // Массив "указателей" на последний элемент матрицы L, чтобы можно было
     // в неё переносить элементы из U
     std::vector<size_t> LE(H+1, SPARSE_END);
 
-    std::vector<size_t> Rfill, Cfill;
+    std::vector<size_t> Rfill(H+1), Cfill(H+1);
 
     for (size_t k = 1; k <= H; ++k)
     {
-        Rfill.assign(H+1, 0);
-        Cfill.assign(H+1, 0);
+        memset(&Rfill[0]+k,0,(H-k+1)*sizeof(size_t));
+        memset(&Cfill[0]+k,0,(H-k+1)*sizeof(size_t));
 
         double norm = 0;
         for (size_t i = k; i <= H; ++i)
@@ -73,8 +72,6 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
 
         for (size_t i = k; i <= H; ++i)
         {
-            //if ((Rfill[i] == 0) || (Cfill[i])) return false;
-
             for (size_t q = _M.U.F[i]; q != SPARSE_END; q = _M.U.N[q])
             {
                 double val = fabs(_M.U.V[q]);
@@ -115,15 +112,17 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
         std::vector<size_t> kJ;
         std::vector<double> kV;
 
-        double diag = _M.U.V[_M.U.F[k]];
+        size_t q = _M.U.F[k];
+        double diag = _M.U.V[q];
 
         // Преобразуем строку в U
         // и запомним столбцовые индексы и значения в строке
-        for (size_t q = _M.U.N[_M.U.F[k]]; q != SPARSE_END; q = _M.U.N[q])
+        for (q = _M.U.N[q]; q != SPARSE_END; q = _M.U.N[q])
         {
             kJ.push_back(_M.U.C[q]);
             kV.push_back(_M.U.V[q]/diag);
         }
+        size_t N = kJ.size();
 
         for (size_t i = k+1; i <= H; ++i)
         {
@@ -136,10 +135,9 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
             size_t q = _M.U.N[p];
 
             double bdiag = _M.U.V[p];
-
             _M.U.V[p] /= diag;
 
-            for (size_t l = 0; l < kJ.size(); ++l)
+            for (size_t l = 0; l < N; ++l)
             {
                 j1 = kJ[l];
                 while (q != SPARSE_END)
@@ -156,10 +154,11 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
                     {
                         // Тут уже нужно добавить элемент
                         _M.U.C.push_back(j1);
-                        _M.U.N[p] = _M.U.C.size()-1; // предыдущему ссылку на этот
+                        size_t p1 = _M.U.C.size()-1;
+                        _M.U.N[p] = p1; // предыдущему ссылку на этот
                         _M.U.N.push_back(q);  // этому ссылку на следующий
                         _M.U.V.push_back(-kV[l]*bdiag);
-                        p = q; q = _M.U.C.size()-1;
+                        p = q; q = p1;
                         // больше вроде ничего делать не нужно,
                         // здесь могут попасться только "вторые" элементы в
                         // строке и F менять не нужно.
@@ -171,10 +170,11 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
                 {
                     // Добавим элементы в конец
                     _M.U.C.push_back(j1);
-                    _M.U.N[p] = _M.U.C.size()-1; // предыдущему ссылку на этот
+                    size_t p1 = _M.U.C.size()-1;
+                    _M.U.N[p] = p1; // предыдущему ссылку на этот
                     _M.U.N.push_back(q);  // этому ссылку на следующий
                     _M.U.V.push_back(-kV[l]*bdiag);
-                    p = q; q = _M.U.C.size()-1;
+                    p = q; q = p1;
                 }
             }
             // и вот тут элемент в ведущем столбце отходит матрице L
@@ -217,8 +217,9 @@ bool MatrixOperations::Solve(LUPS &_M, Vector &B, Vector &X)
     // Обратный ход U*(Pc*x)=y
     for (size_t i = H; i >= 1; --i)
     {
-        double diag = _M.U.V[_M.U.F[i]];
-        for (size_t q = _M.U.N[_M.U.F[i]]; q != SPARSE_END; q = _M.U.N[q])
+        size_t q = _M.U.F[i];
+        double diag = _M.U.V[q];
+        for (q = _M.U.N[q]; q != SPARSE_END; q = _M.U.N[q])
         {
             X.V[i] -= _M.U.V[q]*X.V[_M.U.C[q]];
         }
@@ -254,8 +255,7 @@ bool MatrixOperations::Inverse(SparseMatrix &M, Matrix &_M)
         if (!Solve(LU, B, X)) return false;
 
         for (size_t j = 1; j <= H; ++j)
-            _M.set(j, i, X.V[j]);
-        //memcpy(&(_M.M[1+H*(i-1)]),&(X[1]),sizeof(T)*H);
+            _M.M[_M.W*(j-1)+i] = X.V[j];
     }
     return true;
 }
@@ -280,9 +280,10 @@ bool MatrixOperations::LUTriang(Matrix &M, LUPM &_M)
 
         for (size_t i = k; i <= H; ++i)
         {
+            size_t h = H*(i-1);
             for (size_t j = k; j <= H; ++j)
             {
-                value = fabs(_M.M.M[H*(i-1)+j]);
+                value = fabs(_M.M.M[h+j]);
                 if (value > norm)
                 {
                     norm = value;
@@ -305,14 +306,16 @@ bool MatrixOperations::LUTriang(Matrix &M, LUPM &_M)
 
         double diag = _M.M.get(k,k);
 
+        size_t h1 = H*(k-1);
 #pragma omp parallel for
         for (size_t i = k+1; i <= H; ++i)
         {
-            _M.M.M[H*(i-1)+k] /= diag;
-            double nbdiag = _M.M.M[H*(i-1)+k];
+            size_t h = H*(i-1);
+            _M.M.M[h+k] /= diag;
+            double nbdiag = _M.M.M[h+k];
             for (size_t j = k+1; j <= H; ++j)
             {
-                _M.M.M[H*(i-1)+j] -= _M.M.M[H*(k-1)+j] * nbdiag;
+                _M.M.M[h+j] -= _M.M.M[h1+j] * nbdiag;
             }
         }
 
@@ -336,21 +339,21 @@ bool MatrixOperations::Solve(LUPM &_M, Vector &B, Vector &X)
     // Прямой ход L*y=Pr*B
     for (size_t i = 1; i <= H; ++i) X.V[i] = B.V[_M.P[i]]; //Pr*B;
 
-    for (size_t i = 1; i <= H; ++i)
+    for (size_t i = 1, h = 0; i <= H; ++i, h = H*(i-1))
     {
         for (size_t j = 1; j < i; ++j)
         {
-            X.V[i] -= _M.M.M[H*(i-1)+j]*X.V[j];
+            X.V[i] -= _M.M.M[h+j]*X.V[j];
         }
     }
 
     // Обратный ход U*(Pc*x)=y
-    for (size_t i = H; i >= 1; --i)
+    for (size_t i = H, h = H*(H-1); i >= 1; --i, h = H*(i-1))
     {
-        double diag = _M.M.get(i, i);
+        double diag = _M.M.M[h+i];
         for (size_t j = i+1; j <= H; ++j)
         {
-            X.V[i] -= _M.M.M[H*(i-1)+j]*X.V[j];
+            X.V[i] -= _M.M.M[h+j]*X.V[j];
         }
         X.V[i] /= diag;
     }

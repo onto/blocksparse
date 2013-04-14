@@ -72,7 +72,7 @@ public:
 
         Vector OV(V1.H);
 
-        #pragma omp parallel for
+#pragma omp parallel for
         for (size_t i = 0; i <= V1.H; ++i)
             OV.V[i] = V1.V[i] + V2.V[i];
 
@@ -86,7 +86,7 @@ public:
 
         Vector OV(V1.H);
 
-        #pragma omp parallel for
+#pragma omp parallel for
         for (size_t i = 0; i <= V1.H; ++i)
             OV.V[i] = V1.V[i] - V2.V[i];
 
@@ -98,7 +98,7 @@ public:
     {
         if (V1.H != V2.H) {}
 
-        #pragma omp parallel for
+#pragma omp parallel for
         for (size_t i = 0; i <= V1.H; ++i)
             V1.V[i] -= V2.V[i];
 
@@ -110,7 +110,7 @@ public:
     {
         if (V1.H != V2.H) {}
 
-        #pragma omp parallel for
+#pragma omp parallel for
         for (size_t i = 0; i <= V1.H; ++i)
             V1.V[i] += V2.V[i];
 
@@ -188,12 +188,13 @@ public:
 
     void swapCol(size_t c1, size_t c2)
     {
-        #pragma omp parallel for
+#pragma omp parallel for
         for (size_t i = 1; i <= H; ++i)
         {
-            double t = M[W*(i-1)+c1];
-            M[W*(i-1)+c1] = M[W*(i-1)+c2];
-            M[W*(i-1)+c2] = t;
+            size_t h1 = W*(i-1)+c1, h2 = W*(i-1)+c2;
+            double t = M[h1];
+            M[h1] = M[h2];
+            M[h2] = t;
         }
     }
 
@@ -202,11 +203,11 @@ public:
     {
         if ((M1.H != M2.H) || (M1.W != M2.W)) {} // надо бы бросить исключение
 
-        Matrix OM(M1.H, M1.W);
+        Matrix OM(M1);
 
-        #pragma omp parallel for
+#pragma omp parallel for
         for (size_t i = 1; i <= OM.M.size(); ++i)
-            OM.M[i] = M1.M[i] + M2.M[i];
+            OM.M[i] += M2.M[i];
 
         return OM;
     }
@@ -216,52 +217,20 @@ public:
     {
         if ((M1.H != M2.H) || (M1.W != M2.W)) {} // надо бы бросить исключение
 
-        Matrix OM(M1.H, M1.W);
+        Matrix OM(M1);
 
-        #pragma omp parallel for
+#pragma omp parallel for
         for (size_t i = 1; i <= OM.M.size(); ++i)
-            OM.M[i] = M1.M[i] - M2.M[i];
+            OM.M[i] -= M2.M[i];
 
         return OM;
     }
-
-
-    friend Matrix operator *(const Matrix &M1, const Matrix &M2)
-    {
-        if (M1.W != M2.H) {} // надо бы бросить исключение
-
-        Matrix OM(M1.H, M2.W);
-
-        #pragma omp parallel for
-        for (size_t i = 1; i <= M1.H; ++i)
-            for (size_t j = 1; j <= M2.W; ++j)
-                for (size_t k = 1; k <= M1.W; ++k)
-                    OM.M[OM.W*(i-1)+j] += M1.M[M1.W*(i-1)+k] * M2.M[M2.W*(k-1)+j];
-
-        return OM;
-    }
-
-
-    friend Vector operator *(const Matrix &M, const Vector &V)
-    {
-        if (M.W != V.H) {} // надо бы бросить исключение
-
-        Vector OV(M.H);
-
-        #pragma omp parallel for
-        for (size_t i = 1; i <= M.H; ++i)
-            for (size_t j = 1; j <= M.W; ++j)
-                OV.V[i] += M.M[M.W*(i-1)+j] * V.V[j];
-
-        return OV;
-    }
-
 
     friend Matrix& operator -=(Matrix &M1, const Matrix &M2)
     {
         if ((M1.H != M2.H) || (M1.W != M2.W)) {} // надо бы бросить исключение
 
-        #pragma omp parallel for
+#pragma omp parallel for
         for (size_t i = 1; i < M1.M.size(); ++i)
             M1.M[i] -= M2.M[i];
 
@@ -273,12 +242,52 @@ public:
     {
         if ((M1.H != M2.H) || (M1.W != M2.W)) {} // надо бы бросить исключение
 
-        #pragma omp parallel for
+#pragma omp parallel for
         for (size_t i = 1; i < M1.M.size(); ++i)
             M1.M[i] += M2.M[i];
 
         return M1;
     }
+
+    friend Matrix operator *(const Matrix &M1, const Matrix &M2)
+    {
+        if (M1.W != M2.H) {} // надо бы бросить исключение
+
+        Matrix OM(M1.H, M2.W);
+
+#pragma omp parallel for
+        for (size_t i = 1; i <= M1.H; ++i)
+        {
+            size_t h1 = M1.W*(i-1);
+            for (size_t j = 1; j <= M2.W; ++j)
+            {
+                size_t h2 = OM.W*(i-1)+j;
+                for (size_t k = 1; k <= M1.W; ++k)
+                    OM.M[h2] += M1.M[h1+k] * M2.get(k,j);
+            }
+        }
+
+        return OM;
+    }
+
+
+    friend Vector operator *(const Matrix &M, const Vector &V)
+    {
+        if (M.W != V.H) {} // надо бы бросить исключение
+
+        Vector OV(M.H);
+
+#pragma omp parallel for
+        for (size_t i = 1; i <= M.H; ++i)
+        {
+            size_t h = M.W*(i-1);
+            for (size_t j = 1; j <= M.W; ++j)
+                OV.V[i] += M.M[h+j] * V.V[j];
+        }
+
+        return OV;
+    }
+
 };
 
 

@@ -175,7 +175,7 @@ double SparseMatrix::get(size_t row, size_t col) const
 
 void SparseMatrix::add(size_t row, size_t col, double value)
 {
-    int q = N.size();
+    size_t q = N.size();
     C.push_back(col);
     V.push_back(value);
     N.push_back(SPARSE_END);
@@ -320,22 +320,20 @@ Matrix operator *(const SparseMatrix &S, const Matrix &M)
 {
     if (S.W != M.H) {} // надо бы бросить исключение
 
-    size_t j;
-    double v;
-
     Matrix OM(S.H,M.W);
 
-#pragma omp parallel for private(j, v)
+#pragma omp parallel for
     for (size_t i = 1; i <= OM.H; ++i)
     {
+        size_t h = OM.W*(i-1);
         for (size_t q = S.F[i]; q != SPARSE_END; q = S.N[q])
         {
-            j = S.C[q];
-            v = S.V[q];
+            size_t h1 = M.W*(S.C[q]-1);
+            double v = S.V[q];
             for (size_t k = 1; k <= OM.W; ++k)
             {
                 //OM[i,k] += S[i,j]*M[j,k]
-                 OM.M[OM.W*(i-1)+k] += v * M.M[M.W*(j-1)+k];
+                OM.M[h+k] += v * M.M[h1+k];
             }
         }
     }
@@ -348,17 +346,15 @@ Matrix operator *(const Matrix &M, const SparseMatrix &S)
 {
     if (M.W != S.H) {} // надо бы бросить исключение
 
-    size_t j;
-    double v;
-
     Matrix OM(M.H,S.W);
-#pragma omp parallel for private(j, v)
+
+#pragma omp parallel for
     for (size_t i = 1; i <= M.W; ++i)
     {
         for (size_t q = S.F[i]; q != SPARSE_END; q = S.N[q])
         {
-            j = S.C[q];
-            v = S.V[q];
+            size_t j = S.C[q];
+            double v = S.V[q];
             for (size_t k = 1; k <= OM.H; ++k)
             {
                 //OM[k,j] += M[k,i]*S[i,j]
@@ -394,8 +390,11 @@ Matrix operator +(const SparseMatrix &S, const Matrix &M)
 
 #pragma omp parallel for
     for (size_t i = 1; i <= S.H; ++i)
+    {
+        size_t h = OM.W*(i-1);
         for (size_t q = S.F[i]; q != SPARSE_END; q = S.N[q])
-            OM.M[OM.W*(i-1)+S.C[q]] += S.V[q];
+            OM.M[h+S.C[q]] += S.V[q];
+    }
 
     return OM;
 }
@@ -413,8 +412,11 @@ Matrix& operator +=(Matrix &M, const SparseMatrix &S)
 
 #pragma omp parallel for
     for (size_t i = 1; i <= S.H; ++i)
+    {
+        size_t h = M.W*(i-1);
         for (size_t q = S.F[i]; q != SPARSE_END; q = S.N[q])
-            M.M[M.W*(i-1)+S.C[q]] += S.V[q];
+            M.M[h+S.C[q]] += S.V[q];
+    }
 
     return M;
 }
@@ -432,8 +434,11 @@ Matrix operator -(const SparseMatrix &S, const Matrix &M)
 
 #pragma omp parallel for
     for (size_t i = 1; i <= S.H; ++i)
+    {
+        size_t h = OM.W*(i-1);
         for (size_t q = S.F[i]; q != SPARSE_END; q = S.N[q])
-            OM.M[OM.W*(i-1)+S.C[q]] += S.V[q];
+            OM.M[h+S.C[q]] += S.V[q];
+    }
 
     return OM;
 }
@@ -447,13 +452,14 @@ Matrix operator -(const Matrix &M, const SparseMatrix &S)
 
 #pragma omp parallel for
     for (size_t i = 1; i <= S.H; ++i)
+    {
+        size_t h = OM.W*(i-1);
         for (size_t q = S.F[i]; q != SPARSE_END; q = S.N[q])
-            OM.M[OM.W*(i-1)+S.C[q]] -= S.V[q];
+            OM.M[h+S.C[q]] -= S.V[q];
+    }
 
     return OM;
 }
-
-
 
 
 #endif // SPARSEMATRIX_H
