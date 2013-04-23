@@ -3,8 +3,8 @@
 
 #include <vector>
 
-#include <matrix.h>
-#include <sparsematrix.h>
+#include "matrix.h"
+#include "sparsematrix.h"
 
 struct LUPS
 {
@@ -65,6 +65,7 @@ struct LUPM
     }
 };
 
+
 struct FactorizedBlockSparseMatrix
 {
     std::vector< Matrix > Ainv;      // Ainv_i = inv(A_i)
@@ -72,7 +73,7 @@ struct FactorizedBlockSparseMatrix
     std::vector< SparseMatrix > C;   // C_i - r_q x r_i
     SparseMatrix Q;                  // Q - r_q x r_q
     LUPM H;                          // H = LUTriang(Q - sum(C_i * Ainv_i * B_i))
-    std::vector<size_t> R;              // r_1--r_q
+    std::vector<size_t> R;           // r_1--r_q
 };
 
 

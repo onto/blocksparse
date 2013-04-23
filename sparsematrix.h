@@ -348,13 +348,13 @@ Matrix operator *(const Matrix &M, const SparseMatrix &S)
 
     Matrix OM(M.H,S.W);
 
-#pragma omp parallel for
     for (size_t i = 1; i <= M.W; ++i)
     {
         for (size_t q = S.F[i]; q != SPARSE_END; q = S.N[q])
         {
             size_t j = S.C[q];
             double v = S.V[q];
+#pragma omp parallel for
             for (size_t k = 1; k <= OM.H; ++k)
             {
                 //OM[k,j] += M[k,i]*S[i,j]

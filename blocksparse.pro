@@ -10,7 +10,8 @@ HEADERS += \
     matrix.h \
     blockmatrix.h \
     matrixoperations.h \
-    matrixcontainers.h
+    matrixcontainers.h \
+    cudaoperations.h
 
 QMAKE_CXXFLAGS += -fopenmp
 QMAKE_LFLAGS += -fopenmp

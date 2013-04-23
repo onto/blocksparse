@@ -7,8 +7,6 @@
 #include <cmath>
 #include <omp.h>
 
-#include "sparsematrix.h"
-
 class Vector
 {
 public:
@@ -160,6 +158,14 @@ public:
         M[W*(row-1)+col] = value;
     }
 
+    void zeros(size_t h, size_t w)
+    {
+        H = h;
+        W = w;
+        M.resize(H*W+1);
+        memset(&M[0], 0, (H*W+1)*sizeof(double));
+    }
+
     void print() const
     {
         for (size_t i = 1; i <= H; ++i)
@@ -263,7 +269,7 @@ public:
             {
                 size_t h2 = OM.W*(i-1)+j;
                 for (size_t k = 1; k <= M1.W; ++k)
-                    OM.M[h2] += M1.M[h1+k] * M2.get(k,j);
+                    OM.M[h2] += M1.M[h1+k] * M2.M[M2.W*(k-1)+j];
             }
         }
 

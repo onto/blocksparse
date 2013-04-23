@@ -1,10 +1,9 @@
 #include <iostream>
 
-//#include <blockmatrix.h>
-//#include <matrix.h>
 #include "sparsematrix.h"
 #include "matrixoperations.h"
 #include <cstdlib>
+#include <time.h>
 
 using namespace std;
 
@@ -23,18 +22,31 @@ int main(int argc, char *argv[3])
     if (type == 1)
     {
         SparseMatrix M("matrix_s.txt");
+
         Vector B("vector.txt");
+
+        //M.print(); B.print();
 
         cout << M.N.size()-1 << endl;
 
         LUPS T;
 
+        time_t t = clock();
+
         MatrixOperations::LUTriang(M, T);
 
+        cout << "Время на разложение " << double((clock()-t))/CLOCKS_PER_SEC << endl;
+
         Vector X;
+
+        t = clock();
         MatrixOperations::Solve(T, B, X);
 
+        cout << "Время на решение " << double((clock()-t))/CLOCKS_PER_SEC << endl;
+
         //X.print();
+        cout << X.V[1] << endl;
+        cout << X.V[2] << endl;
     }
     else
     {
@@ -42,90 +54,45 @@ int main(int argc, char *argv[3])
         Vector B("vector.txt");
 
 #ifdef _OPENMP
-    omp_set_num_threads(threads);
-    double t = omp_get_wtime();
+        omp_set_num_threads(threads);
+        double t = omp_get_wtime();
+#else
+    time_t t = clock();
 #endif
-        FactorizedBlockSparseMatrix FM;
 
+        FactorizedBlockSparseMatrix FM;
         MatrixOperations::BlockMatrixFactorization(M1, FM);
+
 #ifdef _OPENMP
-    t = omp_get_wtime() - t;
-    cout << "Время на разложение " << t << endl;
-    t = omp_get_wtime();
+        t = omp_get_wtime() - t;
+        cout << "Время на разложение " << t << endl;
+        t = omp_get_wtime();
+#else
+        cout << "Время на разложение " << double((clock()-t))/CLOCKS_PER_SEC << endl;
+        t = clock();
 #endif
+
         Vector X;
         MatrixOperations::Solve(FM, B, X);
 
 #ifdef _OPENMP
-    t = omp_get_wtime() - t;
-    cout << "Время на решение " << t << endl;
+        t = omp_get_wtime() - t;
+        cout << "Время на решение " << t << endl;
+#else
+        cout << "Время на решение " << double((clock()-t))/CLOCKS_PER_SEC << endl;
 #endif
-        //X.print();
+        cout << X.V[1] << endl;
+        cout << X.V[2] << endl;
     }
 
-
-
+//    SparseMatrix M("m6.txt");
 //    M.print();
-    //cout << '\n';
 
-////    M.swapCol(2,3);
+//    Matrix Minv;
 
-////    M.print();
-////    cout << '\n';
-
-//    LUPS<double> T;
-
-//    if (!MatrixOperations<double>::LUTriang(M, T))
-//    {
-//        cout << "LU :(" << endl;
-//    }
-
-//    T.printL();
-//        cout << '\n';
-//    T.printU();
-//        cout << '\n';
-
-//    Matrix<double> Minv;
-
-//    MatrixOperations<double>::Inverse(M,Minv);
+//    MatrixOperations::Inverse(M, Minv);
 
 //    Minv.print();
-//    //cout << '\n';
-
-//    Matrix<double> Minvinv;
-
-//    MatrixOperations<double>::Inverse(Minv, Minvinv);
-
-//    (M-Minvinv).print();
-//    cout << '\n';
-
-////    Vector<double> X, B(11);
-
-////    B.set(1,2.9);
-////    B.set(2,3.8);
-
-////    MatrixOperations<double>::Solve(T, B, X);
-
-////    X.print();
-
-
-    //M.A[681].save2fileold("a681old.txt");
-
-    //SparseMatrix<double> M("m6.txt");
-//    SparseMatrix<double> M("a681.txt");
-
-//    LUPS<double> T;
-
-//    if (!MatrixOperations<double>::LUTriang(M, T))
-//    {
-//        cout << "LU :(" << endl;
-//    }
-
-//    T.printL();
-//        cout << '\n';
-//    T.printU();
-//        cout << '\n';
-
 
     return 0;
 }

@@ -5,10 +5,14 @@
 #include <cmath>
 #include <omp.h>
 
-#include <sparsematrix.h>
-#include <blockmatrix.h>
-#include <matrix.h>
-#include <matrixcontainers.h>
+#include "sparsematrix.h"
+#include "blockmatrix.h"
+#include "matrix.h"
+#include "matrixcontainers.h"
+
+#ifdef __NVCC__
+#include "cudaoperations.h"
+#endif
 
 class MatrixOperations
 {
@@ -16,7 +20,7 @@ public:
     static bool LUTriang(SparseMatrix &M, LUPS &_M, double pivRel = 0.001);
     static bool LUTriang(Matrix &M, LUPM &_M);
 
-    static bool Solve(LUPS &M, Vector &B, Vector &X);
+    static bool Solve(LUPS &M, Vector &B, Vector &X, bool transp = true);
     static bool Solve(LUPM &M, Vector &B, Vector &X);
 
     static bool Inverse(SparseMatrix &M, Matrix &_M);
@@ -50,8 +54,8 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
 
     for (size_t k = 1; k <= H; ++k)
     {
-        memset(&Rfill[0]+k,0,(H-k+1)*sizeof(size_t));
-        memset(&Cfill[0]+k,0,(H-k+1)*sizeof(size_t));
+        memset(&Rfill[k],0,(H-k+1)*sizeof(size_t));
+        memset(&Cfill[k],0,(H-k+1)*sizeof(size_t));
 
         double norm = 0;
         for (size_t i = k; i <= H; ++i)
@@ -192,13 +196,17 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
 }
 
 
-bool MatrixOperations::Solve(LUPS &_M, Vector &B, Vector &X)
+bool MatrixOperations::Solve(LUPS &_M, Vector &B, Vector &X, bool transp)
 {
     size_t H = _M.U.H;
 
     // Транспонируем P для столбцов
-    std::vector<size_t> P(H+1);
-    for (size_t i = 1; i <= H; ++i) P[_M.P[H+i]] = i;
+    if (transp)
+    {
+        std::vector<size_t> P(H+1);
+        for (size_t i = 1; i <= H; ++i) P[_M.P[H+i]] = i;
+        memcpy(&(_M.P[H+1]),&P[1], H*sizeof(size_t));
+    }
 
     X.H = H;
     X.V.assign(H+1, 0);
@@ -227,7 +235,7 @@ bool MatrixOperations::Solve(LUPS &_M, Vector &B, Vector &X)
     }
 
     std::vector<double> XX = X.V;
-    for (size_t i = 1; i <= H; ++i) X.V[i] = XX[P[i]];
+    for (size_t i = 1; i <= H; ++i) X.V[i] = XX[_M.P[H+i]];
 
     return true;
 }
@@ -242,6 +250,14 @@ bool MatrixOperations::Inverse(SparseMatrix &M, Matrix &_M)
 
     _M = Matrix(H);
 
+    // Сначала транспонируем матрицу перестановок для столбцов,
+    // чтобы не делать этого каждый раз
+    std::vector<size_t> P(H+1);
+    for (size_t i = 1; i <= H; ++i) P[LU.P[H+i]] = i;
+    memcpy(&(LU.P[H+1]), &P[1], H*sizeof(size_t));
+
+#ifndef __NVCC__
+
     Vector B(H);
     Vector X;
 
@@ -252,11 +268,79 @@ bool MatrixOperations::Inverse(SparseMatrix &M, Matrix &_M)
         B.V[i-1] = 0;
         B.V[i] = 1.0;
 
-        if (!Solve(LU, B, X)) return false;
+        if (!Solve(LU, B, X, false)) return false;
 
         for (size_t j = 1; j <= H; ++j)
             _M.M[_M.W*(j-1)+i] = X.V[j];
     }
+
+#else
+
+    //Копируем разложенную матрицу на видеокарту
+    size_t *cP;     size_t Pbytes = sizeof(size_t)*LU.P.size();
+    size_t *cLF;    size_t LFbytes = sizeof(size_t)*LU.LF.size();
+    size_t *cC;     size_t Cbytes = sizeof(size_t)*LU.U.C.size();
+    size_t *cN;     size_t Nbytes = sizeof(size_t)*LU.U.N.size();
+    size_t *cF;     size_t Fbytes = sizeof(size_t)*LU.U.F.size();
+    double *cV;     size_t Vbytes = sizeof(double)*LU.U.V.size();
+
+    cudaMalloc((void**)&cP, Pbytes);
+    cudaMemcpy(cP, &(LU.P[0]), Pbytes, cudaMemcpyHostToDevice);
+
+    cudaMalloc((void**)&cLF, LFbytes);
+    cudaMemcpy(cLF, &(LU.LF[0]), LFbytes, cudaMemcpyHostToDevice);
+
+    cudaMalloc((void**)&cC, Cbytes);
+    cudaMemcpy(cC, &(LU.U.C[0]), Cbytes, cudaMemcpyHostToDevice);
+
+    cudaMalloc((void**)&cN, Nbytes);
+    cudaMemcpy(cN, &(LU.U.N[0]), Nbytes, cudaMemcpyHostToDevice);
+
+    cudaMalloc((void**)&cF, Fbytes);
+    cudaMemcpy(cF, &(LU.U.F[0]), Fbytes, cudaMemcpyHostToDevice);
+
+    cudaMalloc((void**)&cV, Vbytes);
+    cudaMemcpy(cV, &(LU.U.V[0]), Vbytes, cudaMemcpyHostToDevice);
+
+    //Выходной вектор с матрицей
+    double *cM;     size_t Mbytes = (H*H+1)*sizeof(double);
+    cudaMalloc((void**)&cM, Mbytes);
+    cudaMemset(cM, 0, Mbytes);
+
+    //Пора запускать ядро
+    cudaDeviceProp cProp;
+    cudaGetDeviceProperties(&cProp, 0);
+    size_t maxThreads = cProp.maxThreadsPerBlock;
+
+    dim3 threads(maxThreads, 1, 1);
+    dim3 blocks((H+maxThreads-1)/maxThreads, 1);
+
+    CudaInverse<<<blocks, threads>>>(H, cP, cLF, cC, cN, cF, cV, cM);
+
+    //Эвенты
+    cudaEvent_t syncEvent;
+    cudaEventCreate(&syncEvent);
+    cudaEventRecord(syncEvent, 0);
+    cudaEventSynchronize(syncEvent);
+
+    //Заберем матрицу(заодно переставляя строки)
+    for (size_t i = 1; i <= H; ++i)
+        cudaMemcpy(&(_M.M[H*(i-1)+1]), cM+H*(LU.P[H+i]-1)+1, H*sizeof(double),
+                cudaMemcpyDeviceToHost);
+
+    cudaEventDestroy(syncEvent);
+
+    // Уберем за собой
+    cudaFree(cP);
+    cudaFree(cLF);
+    cudaFree(cC);
+    cudaFree(cN);
+    cudaFree(cF);
+    cudaFree(cV);
+    cudaFree(cM);
+
+#endif
+
     return true;
 }
 
@@ -304,7 +388,7 @@ bool MatrixOperations::LUTriang(Matrix &M, LUPM &_M)
             t = _M.P[H+optj]; _M.P[H+optj] = _M.P[H+k]; _M.P[H+k] = t;
         }
 
-        double diag = _M.M.get(k,k);
+        double diag = _M.M.M[_M.M.W*(k-1)+k];
 
         size_t h1 = H*(k-1);
 #pragma omp parallel for
@@ -318,7 +402,6 @@ bool MatrixOperations::LUTriang(Matrix &M, LUPM &_M)
                 _M.M.M[h+j] -= _M.M.M[h1+j] * nbdiag;
             }
         }
-
     }
 
     return true;
@@ -372,7 +455,7 @@ bool MatrixOperations::Inverse(Matrix &M, Matrix &_M)
 
     size_t H = M.H;
 
-    _M = Matrix(H);
+    _M.zeros(H, H);
 
     Vector B(H);
     Vector X;
@@ -391,7 +474,8 @@ bool MatrixOperations::Inverse(Matrix &M, Matrix &_M)
 }
 
 
-bool MatrixOperations::BlockMatrixFactorization(BlockSparseMatrix &M, FactorizedBlockSparseMatrix &_M)
+bool MatrixOperations::BlockMatrixFactorization(BlockSparseMatrix &M,
+                                                FactorizedBlockSparseMatrix &_M)
 {
 
     _M.B = M.B;
@@ -402,7 +486,9 @@ bool MatrixOperations::BlockMatrixFactorization(BlockSparseMatrix &M, Factorized
     size_t N = _M.R.size()-1;
 
     // Инвертируем A_i
-    _M.Ainv.resize(N);
+    for (size_t i = 0; i < N; ++i)
+        _M.Ainv.push_back(Matrix(M.R[i]));
+
 #pragma omp parallel for
     for (size_t i = 0; i < N; ++i)
     {
@@ -424,7 +510,8 @@ bool MatrixOperations::BlockMatrixFactorization(BlockSparseMatrix &M, Factorized
 }
 
 
-bool MatrixOperations::Solve(FactorizedBlockSparseMatrix &M, Vector &B, Vector &X)
+bool MatrixOperations::Solve(FactorizedBlockSparseMatrix &M, Vector &B,
+                             Vector &X)
 {
 
     std::vector< Vector >b;

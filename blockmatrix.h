@@ -5,9 +5,7 @@
 #include <iostream>
 #include <fstream>
 
-#include <matrixoperations.h>
-#include <sparsematrix.h>
-#include <matrix.h>
+#include "sparsematrix.h"
 
 struct BlockSparseMatrix
 {
