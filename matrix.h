@@ -57,6 +57,13 @@ public:
         V[i] = value;
     }
 
+    void zeros(size_t h)
+    {
+        H = h;
+        V.resize(H+1);
+        memset(&V[0], 0, (H+1)*sizeof(double));
+    }
+
     void print() const
     {
         for (size_t i = 1; i <= H; ++i)

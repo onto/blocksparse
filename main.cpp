@@ -29,20 +29,36 @@ int main(int argc, char *argv[3])
 
         cout << M.N.size()-1 << endl;
 
-        LUPS T;
-
+#ifdef _OPENMP
+        omp_set_num_threads(threads);
+        double t = omp_get_wtime();
+        double t1 = t;
+#else
         time_t t = clock();
+        time_t t1 = t;
+#endif
 
+        LUPS T;
         MatrixOperations::LUTriang(M, T);
 
+#ifdef _OPENMP
+        cout << "Время на разложение " << omp_get_wtime() - t << endl;
+        t = omp_get_wtime();
+#else
         cout << "Время на разложение " << double((clock()-t))/CLOCKS_PER_SEC << endl;
+        t = clock();
+#endif
 
         Vector X;
-
-        t = clock();
         MatrixOperations::Solve(T, B, X);
 
+#ifdef _OPENMP
+        cout << "Время на решение " << omp_get_wtime() - t << endl;
+        cout << "Общее время " << omp_get_wtime() - t1 << endl;
+#else
         cout << "Время на решение " << double((clock()-t))/CLOCKS_PER_SEC << endl;
+        cout << "Общее время " << double((clock()-t1))/CLOCKS_PER_SEC << endl;
+#endif
 
         //X.print();
         cout << X.V[1] << endl;
@@ -53,19 +69,31 @@ int main(int argc, char *argv[3])
         BlockSparseMatrix M1("matrix_b.txt");
         Vector B("vector.txt");
 
+        size_t S = 0;
+        for (size_t i = 0; i < M1.A.size(); ++i)
+        {
+            S += M1.A[i].V.size()-1;
+            S += M1.B[i].V.size()-1;
+            S += M1.C[i].V.size()-1;
+        }
+        S += M1.Q.V.size()-1;
+
+        cout << S << endl;
+
 #ifdef _OPENMP
         omp_set_num_threads(threads);
         double t = omp_get_wtime();
+        double t1 = t;
 #else
-    time_t t = clock();
+        time_t t = clock();
+        time_t t1 = t;
 #endif
 
         FactorizedBlockSparseMatrix FM;
         MatrixOperations::BlockMatrixFactorization(M1, FM);
 
 #ifdef _OPENMP
-        t = omp_get_wtime() - t;
-        cout << "Время на разложение " << t << endl;
+        cout << "Время на разложение " << omp_get_wtime() - t << endl;
         t = omp_get_wtime();
 #else
         cout << "Время на разложение " << double((clock()-t))/CLOCKS_PER_SEC << endl;
@@ -76,23 +104,27 @@ int main(int argc, char *argv[3])
         MatrixOperations::Solve(FM, B, X);
 
 #ifdef _OPENMP
-        t = omp_get_wtime() - t;
-        cout << "Время на решение " << t << endl;
+        cout << "Время на решение " << omp_get_wtime() - t << endl;
+        cout << "Общее время " << omp_get_wtime() - t1 << endl;
 #else
         cout << "Время на решение " << double((clock()-t))/CLOCKS_PER_SEC << endl;
+        cout << "Общее время " << double((clock()-t1))/CLOCKS_PER_SEC << endl;
 #endif
+
         cout << X.V[1] << endl;
         cout << X.V[2] << endl;
     }
 
-//    SparseMatrix M("m6.txt");
-//    M.print();
+//    SparseMatrix M("matrix_s.txt");
+//    //M.print();
 
 //    Matrix Minv;
 
+//    time_t t = clock();
 //    MatrixOperations::Inverse(M, Minv);
+//    cout << "Время на решение " << double((clock()-t))/CLOCKS_PER_SEC << endl;
 
-//    Minv.print();
+    //Minv.print();
 
     return 0;
 }

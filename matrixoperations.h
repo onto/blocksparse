@@ -208,8 +208,7 @@ bool MatrixOperations::Solve(LUPS &_M, Vector &B, Vector &X, bool transp)
         memcpy(&(_M.P[H+1]),&P[1], H*sizeof(size_t));
     }
 
-    X.H = H;
-    X.V.assign(H+1, 0);
+    X.zeros(H);
 
     // Прямой ход L*y=Pr*B
     for (size_t i = 1; i <= H; ++i) X.V[i] = B.V[_M.P[i]]; //Pr*B;
@@ -248,7 +247,7 @@ bool MatrixOperations::Inverse(SparseMatrix &M, Matrix &_M)
 
     size_t H = M.H;
 
-    _M = Matrix(H);
+    _M.zeros(H, H);
 
     // Сначала транспонируем матрицу перестановок для столбцов,
     // чтобы не делать этого каждый раз
@@ -312,7 +311,7 @@ bool MatrixOperations::Inverse(SparseMatrix &M, Matrix &_M)
     cudaGetDeviceProperties(&cProp, 0);
     size_t maxThreads = cProp.maxThreadsPerBlock;
 
-    dim3 threads(maxThreads, 1, 1);
+    dim3 threads(std::min(H,maxThreads), 1, 1);
     dim3 blocks((H+maxThreads-1)/maxThreads, 1);
 
     CudaInverse<<<blocks, threads>>>(H, cP, cLF, cC, cN, cF, cV, cM);
@@ -416,8 +415,7 @@ bool MatrixOperations::Solve(LUPM &_M, Vector &B, Vector &X)
     std::vector<size_t> P(H+1);
     for (size_t i = 1; i <= H; ++i) P[_M.P[H+i]] = i;
 
-    X.H = H;
-    X.V.assign(H+1, 0);
+    X.zeros(H);
 
     // Прямой ход L*y=Pr*B
     for (size_t i = 1; i <= H; ++i) X.V[i] = B.V[_M.P[i]]; //Pr*B;
