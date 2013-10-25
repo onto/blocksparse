@@ -19,7 +19,7 @@ public:
     SparseMatrix(const SparseMatrix &S);
     SparseMatrix(const char *file);
 
-    std::vector<double> V;       //values
+    std::vector<double> V;  //values
     std::vector<size_t> N;  //next in row
     std::vector<size_t> C;  //column
     std::vector<size_t> F;  //first in row
@@ -39,7 +39,6 @@ public:
     void save2file(const char *file) const;
     void save2fileold(const char *file) const;
 
-
     friend Matrix operator *(const SparseMatrix &S, const Matrix &M);
     friend Matrix operator *(const Matrix &M, const SparseMatrix &S);
     friend Vector operator *(const SparseMatrix &S, const Vector &V);
@@ -51,10 +50,7 @@ public:
 
     friend Matrix operator -(const SparseMatrix &S, const Matrix &M);
     friend Matrix operator -(const Matrix &M, const SparseMatrix &S);
-
 };
-
-
 
 SparseMatrix::SparseMatrix()
 {
@@ -67,7 +63,6 @@ SparseMatrix::SparseMatrix()
     N.push_back(SPARSE_END);
 }
 
-
 SparseMatrix::SparseMatrix(size_t h, size_t w)
 {
     H = h;
@@ -79,7 +74,6 @@ SparseMatrix::SparseMatrix(size_t h, size_t w)
     N.push_back(SPARSE_END);
 }
 
-
 SparseMatrix::SparseMatrix(const SparseMatrix &S)
 {
     V = S.V;
@@ -89,7 +83,6 @@ SparseMatrix::SparseMatrix(const SparseMatrix &S)
     H = S.H;
     W = S.W;
 }
-
 
 SparseMatrix::SparseMatrix(const char *file) {
 
@@ -124,10 +117,8 @@ SparseMatrix::SparseMatrix(const char *file) {
     in.close();
 }
 
-
 void SparseMatrix::set(size_t row, size_t col, double value)
 {
-
     if ((row > H) || (col > W)) return;
 
     size_t j, q, p;
@@ -155,7 +146,6 @@ void SparseMatrix::set(size_t row, size_t col, double value)
         N[p] = V.size() - 1;
 }
 
-
 double SparseMatrix::get(size_t row, size_t col) const
 {
     if ((row > H) || (col > W)) return 0;
@@ -172,8 +162,8 @@ double SparseMatrix::get(size_t row, size_t col) const
     return 0;
 }
 
-
 void SparseMatrix::add(size_t row, size_t col, double value)
+//Только для построчного заполнения матрицы
 {
     size_t q = N.size();
     C.push_back(col);
@@ -185,16 +175,13 @@ void SparseMatrix::add(size_t row, size_t col, double value)
         N[q-1] = q;
 }
 
-
 void SparseMatrix::swapRow(size_t r1, size_t r2)
 {
     size_t t = F[r1]; F[r1] = F[r2]; F[r2] = t;
 }
 
-
 void SparseMatrix::swapCol(size_t c1, size_t c2)
 {
-
     for (size_t i = 1; i <= H; ++i)
     {
         bool f1 = false, f2 = false;
@@ -239,7 +226,6 @@ void SparseMatrix::swapCol(size_t c1, size_t c2)
                 N[q1] = q2;
                 C[q1] = c2;
             }
-
         }
         if (!f1 && f2)
         {
@@ -264,7 +250,6 @@ void SparseMatrix::swapCol(size_t c1, size_t c2)
     }
 }
 
-
 void SparseMatrix::print() const
 {
     for (size_t i = 1; i <= H; ++i)
@@ -281,7 +266,6 @@ void SparseMatrix::print() const
     }
 }
 
-
 void SparseMatrix::save2file(const char *file) const
 {
     std::ofstream out(file);
@@ -296,8 +280,8 @@ void SparseMatrix::save2file(const char *file) const
         }
         out << "0\n";
     }
+    out.close();
 }
-
 
 void SparseMatrix::save2fileold(const char *file) const
 {
@@ -309,12 +293,12 @@ void SparseMatrix::save2fileold(const char *file) const
     {
         for (size_t q = F[i]; q != SPARSE_END; q = N[q])
         {
-            out << C[q]-1 << " " << V[q] << '\t';
+            out << C[q] << " " << V[q] << '\t';
         }
-        out << "-1\n";
+        out << "0\n";
     }
+    out.close();
 }
-
 
 Matrix operator *(const SparseMatrix &S, const Matrix &M)
 {
@@ -341,7 +325,6 @@ Matrix operator *(const SparseMatrix &S, const Matrix &M)
     return OM;
 }
 
-
 Matrix operator *(const Matrix &M, const SparseMatrix &S)
 {
     if (M.W != S.H) {} // надо бы бросить исключение
@@ -366,7 +349,6 @@ Matrix operator *(const Matrix &M, const SparseMatrix &S)
     return OM;
 }
 
-
 Vector operator *(const SparseMatrix &S, const Vector &V)
 {
     if (S.W != V.H) {} // надо бы бросить исключение
@@ -380,7 +362,6 @@ Vector operator *(const SparseMatrix &S, const Vector &V)
 
     return OV;
 }
-
 
 Matrix operator +(const SparseMatrix &S, const Matrix &M)
 {
@@ -399,12 +380,10 @@ Matrix operator +(const SparseMatrix &S, const Matrix &M)
     return OM;
 }
 
-
 Matrix operator +(const Matrix &M, const SparseMatrix &S)
 {
     return S + M;
 }
-
 
 Matrix& operator +=(Matrix &M, const SparseMatrix &S)
 {
@@ -420,8 +399,6 @@ Matrix& operator +=(Matrix &M, const SparseMatrix &S)
 
     return M;
 }
-
-
 
 Matrix operator -(const SparseMatrix &S, const Matrix &M)
 {
@@ -443,7 +420,6 @@ Matrix operator -(const SparseMatrix &S, const Matrix &M)
     return OM;
 }
 
-
 Matrix operator -(const Matrix &M, const SparseMatrix &S)
 {
     if ((S.H != M.H) || (S.W != M.W)) {} // надо бы бросить исключение
@@ -460,6 +436,5 @@ Matrix operator -(const Matrix &M, const SparseMatrix &S)
 
     return OM;
 }
-
 
 #endif // SPARSEMATRIX_H

@@ -14,6 +14,8 @@
 #include "cudaoperations.h"
 #endif
 
+#define FAST
+
 class MatrixOperations
 {
 public:
@@ -30,7 +32,6 @@ public:
                                          FactorizedBlockSparseMatrix &_M);
     static bool Solve(FactorizedBlockSparseMatrix &M, Vector &B, Vector &X);
 };
-
 
 bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
 {
@@ -81,7 +82,6 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
                 double val = fabs(_M.U.V[q]);
                 if (val >= pivRel * norm)
                 {
-
                     size_t j = _M.U.C[q];
                     size_t growth = (Rfill[i] - 1) * (Cfill[j] - 1);
 
@@ -146,7 +146,6 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
                 j1 = kJ[l];
                 while (q != SPARSE_END)
                 {
-
                     j2 = _M.U.C[q];
                     if (j2 < j1) { p = q; q = _M.U.N[q]; continue; }
 
@@ -195,7 +194,6 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
     return true;
 }
 
-
 bool MatrixOperations::Solve(LUPS &_M, Vector &B, Vector &X, bool transp)
 {
     size_t H = _M.U.H;
@@ -239,7 +237,6 @@ bool MatrixOperations::Solve(LUPS &_M, Vector &B, Vector &X, bool transp)
     return true;
 }
 
-
 bool MatrixOperations::Inverse(SparseMatrix &M, Matrix &_M)
 {
     LUPS LU;
@@ -263,7 +260,6 @@ bool MatrixOperations::Inverse(SparseMatrix &M, Matrix &_M)
     // решаем систему LUP * _M = E;
     for (size_t i = 1; i <= H; ++i)
     {
-
         B.V[i-1] = 0;
         B.V[i] = 1.0;
 
@@ -343,7 +339,6 @@ bool MatrixOperations::Inverse(SparseMatrix &M, Matrix &_M)
     return true;
 }
 
-
 bool MatrixOperations::LUTriang(Matrix &M, LUPM &_M)
 {
     if (M.H != M.W) return false;
@@ -357,7 +352,6 @@ bool MatrixOperations::LUTriang(Matrix &M, LUPM &_M)
 
     for (size_t k = 1; k < H; ++k)
     {
-
         double norm = 0, value;
         size_t opti = k, optj = k, t;
 
@@ -406,7 +400,6 @@ bool MatrixOperations::LUTriang(Matrix &M, LUPM &_M)
     return true;
 }
 
-
 bool MatrixOperations::Solve(LUPM &_M, Vector &B, Vector &X)
 {
     size_t H = _M.M.H;
@@ -445,7 +438,6 @@ bool MatrixOperations::Solve(LUPM &_M, Vector &B, Vector &X)
     return true;
 }
 
-
 bool MatrixOperations::Inverse(Matrix &M, Matrix &_M)
 {
     LUPM LU;
@@ -471,11 +463,9 @@ bool MatrixOperations::Inverse(Matrix &M, Matrix &_M)
     return true;
 }
 
-
 bool MatrixOperations::BlockMatrixFactorization(BlockSparseMatrix &M,
                                                 FactorizedBlockSparseMatrix &_M)
 {
-
     _M.B = M.B;
     _M.C = M.C;
     _M.Q = M.Q;
@@ -507,11 +497,9 @@ bool MatrixOperations::BlockMatrixFactorization(BlockSparseMatrix &M,
     return true;
 }
 
-
 bool MatrixOperations::Solve(FactorizedBlockSparseMatrix &M, Vector &B,
                              Vector &X)
 {
-
     std::vector< Vector >b;
 
     size_t N = M.R.size()-1;
@@ -558,8 +546,5 @@ bool MatrixOperations::Solve(FactorizedBlockSparseMatrix &M, Vector &B,
 
     return true;
 }
-
-
-
 
 #endif // MATRIXOPERATIONS_H

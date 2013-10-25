@@ -34,7 +34,6 @@ struct LUPS
     }
 };
 
-
 struct LUPM
 {
     Matrix M;
@@ -65,7 +64,6 @@ struct LUPM
     }
 };
 
-
 struct FactorizedBlockSparseMatrix
 {
     std::vector< Matrix > Ainv;      // Ainv_i = inv(A_i)
@@ -75,6 +73,5 @@ struct FactorizedBlockSparseMatrix
     LUPM H;                          // H = LUTriang(Q - sum(C_i * Ainv_i * B_i))
     std::vector<size_t> R;           // r_1--r_q
 };
-
 
 #endif // LUCONTAINER_H

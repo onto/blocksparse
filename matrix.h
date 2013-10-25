@@ -7,6 +7,8 @@
 #include <cmath>
 #include <omp.h>
 
+#define SPARSE_END 0
+
 class Vector
 {
 public:
@@ -16,8 +18,8 @@ public:
     }
     Vector(const Vector &V1)
     {
-        H = V1.H;
         V = V1.V;
+        H = V1.H;
     }
     Vector(size_t h)
     {
@@ -70,7 +72,6 @@ public:
             std::cout << V[i] << '\n';
     }
 
-
     friend Vector operator +(const Vector &V1, const Vector &V2)
     {
         if (V1.H != V2.H) {}
@@ -83,7 +84,6 @@ public:
 
         return OV;
     }
-
 
     friend Vector operator -(const Vector &V1, const Vector &V2)
     {
@@ -98,7 +98,6 @@ public:
         return OV;
     }
 
-
     friend Vector& operator -=(Vector &V1, const Vector &V2)
     {
         if (V1.H != V2.H) {}
@@ -110,7 +109,6 @@ public:
         return V1;
     }
 
-
     friend Vector& operator +=(Vector &V1, const Vector &V2)
     {
         if (V1.H != V2.H) {}
@@ -121,7 +119,6 @@ public:
 
         return V1;
     }
-
 };
 
 class Matrix
@@ -150,6 +147,34 @@ public:
         W = h;
         M.resize(H*W+1);
     }
+    Matrix (const char *file)
+    {
+        std::ifstream in(file);
+
+        in >> H >> W;
+
+        zeros(H, W);
+
+        double x;
+        size_t c;
+
+        for (size_t r = 1; r <= H; ++r)
+        {
+            while (true)
+            {
+                in >> c;
+
+                if (c != SPARSE_END) {
+                    in >> x;
+                    set(r, c, x);
+                } else {
+                    break;
+                }
+            }
+        }
+
+        in.close();
+    }
 
     std::vector<double> M;
     size_t H;
@@ -157,7 +182,7 @@ public:
 
     inline double get(size_t row, size_t col) const
     {
-        return M[H*(row-1)+col];
+        return M[W*(row-1)+col];
     }
 
     inline void set(size_t row, size_t col, double value)
@@ -211,7 +236,6 @@ public:
         }
     }
 
-
     friend Matrix operator +(const Matrix &M1, const Matrix &M2)
     {
         if ((M1.H != M2.H) || (M1.W != M2.W)) {} // надо бы бросить исключение
@@ -224,7 +248,6 @@ public:
 
         return OM;
     }
-
 
     friend Matrix operator -(const Matrix &M1, const Matrix &M2)
     {
@@ -249,7 +272,6 @@ public:
 
         return M1;
     }
-
 
     friend Matrix& operator +=(Matrix &M1, const Matrix &M2)
     {
@@ -283,7 +305,6 @@ public:
         return OM;
     }
 
-
     friend Vector operator *(const Matrix &M, const Vector &V)
     {
         if (M.W != V.H) {} // надо бы бросить исключение
@@ -300,8 +321,6 @@ public:
 
         return OV;
     }
-
 };
-
 
 #endif // MATRIX_H

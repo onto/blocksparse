@@ -7,7 +7,6 @@
 __global__ void CudaInverse(size_t H, size_t *P, size_t *LF, size_t *C,
                             size_t *N, size_t *F, double *V, double *M)
 {
-
     int ind = threadIdx.x + blockIdx.x*blockDim.x + 1;
 
     if ((ind > H) || (ind < 1)) return;
@@ -43,6 +42,4 @@ __global__ void CudaInverse(size_t H, size_t *P, size_t *LF, size_t *C,
     }
 }
 
-
 #endif
-

@@ -6,6 +6,7 @@
 #include <fstream>
 
 #include "sparsematrix.h"
+#include "decompositor.h"
 
 struct BlockSparseMatrix
 {
@@ -13,11 +14,33 @@ struct BlockSparseMatrix
     std::vector< SparseMatrix > B;   // B_i - r_i x r_q
     std::vector< SparseMatrix > C;   // C_i - r_q x r_i
     SparseMatrix Q;                  // Q - r_q x r_q
-    std::vector<size_t> R;              // r_1--r_q
+    std::vector<size_t> R;           // r_1--r_q
 
-    BlockSparseMatrix(const char *file)
+    enum InputType
     {
+        BlockMatrixInputType = 0,
+        SparseMatrixInputType
+    };
 
+    BlockSparseMatrix() {}
+
+    BlockSparseMatrix(const char *file, InputType type)
+    {
+        switch (type) {
+        case BlockMatrixInputType:
+            readBlockMatrix(file);
+            break;
+        case SparseMatrixInputType:
+            readSparseMatrixAndDecompose(file);
+            break;
+        default:
+            break;
+        }
+    }
+
+private:
+    void readBlockMatrix(const char *file)
+    {
         std::ifstream in(file);
 
         size_t r, N = 0;
@@ -82,11 +105,28 @@ struct BlockSparseMatrix
                 Q.add(i,j-q1,x);
                 in >> j;
             }
-
         }
 
         in.close();
     }
+
+    void readSparseMatrixAndDecompose(const char *file)
+    {
+        MatrixDecompositor decomp(file);
+
+        DecompositorResult DR = decomp.getResult();
+
+//        for (size_t i = 1; i < DR.P.size(); ++i)
+//            std::cout << DR.P[i] << " ";
+//        std::cout << std::endl;
+
+        for (size_t i = 0; i < DR.R.size(); ++i)
+            std::cout << DR.R[i] << " ";
+        std::cout << std::endl;
+
+        //Теперь считываем, производя перестановку
+    }
+
 };
 
 #endif // BLOCKMATRIX_H
