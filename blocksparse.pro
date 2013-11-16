@@ -14,6 +14,6 @@ HEADERS += \
     cudaoperations.h \
     decompositor.h
 
-QMAKE_CXXFLAGS += -fopenmp
+QMAKE_CXXFLAGS += -fopenmp -Wextra
 QMAKE_LFLAGS += -fopenmp
 

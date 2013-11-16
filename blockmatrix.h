@@ -116,14 +116,6 @@ private:
 
         DecompositorResult DR = decomp.getResult();
 
-//        for (size_t i = 1; i < DR.P.size(); ++i)
-//            std::cout << DR.P[i] << " ";
-//        std::cout << std::endl;
-
-        for (size_t i = 0; i < DR.R.size(); ++i)
-            std::cout << DR.R[i] << " ";
-        std::cout << std::endl;
-
         //Теперь считываем, производя перестановку
     }
 

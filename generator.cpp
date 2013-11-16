@@ -19,26 +19,27 @@ int main(int argc, char *argv[4])
 
         SparseMatrix S(N, N);
 
-        size_t p = N / 6 + 1;
+        size_t p = N / 4 + 1;
 
         srand(time(NULL));
 
+        //size_t q;
+
         for (size_t i = 1; i <= N; ++i)
         {
+            //q = (i==N)?N:rand()%(N-i) + i+1;
             for (size_t j = i+1; j <= N; ++j)
             {
-                if (rand()%p == 0)
+                if (rand()%p == 0)// || (j == q))
                 {
-                    double num = RANDN;
-                    S.set(i, j, num);
-                    S.set(j, i, num);
+                    S.set(i, j, RANDN);
+                    S.set(j, i, RANDN);
                 }
             }
-            if (rand()%p == 0)
-            {
-                double num = RANDN;
-                S.set(i, i, num);
-            }
+            //if (rand()%p == 0)
+            //{
+                S.set(i, i, RANDN);
+            //}
         }
 
         //S.print();
@@ -100,7 +101,7 @@ int main(int argc, char *argv[4])
             //Строка A
             for (size_t j = q; j < q+R[k]; ++j)
             {
-                double num = ((rand()%2 == 1)?1.0:-1.0)*(1.0+rand())/(1.0+rand());
+                double num = RANDN;
                 if (i == j)
                 {
                     M1 << j << " " << num << '\t';
@@ -122,7 +123,7 @@ int main(int argc, char *argv[4])
             //Строка B
             for (size_t j = N-R.back()+1; j <= N; ++j)
             {
-                double num = ((rand()%2 == 1)?1.0:-1.0)*(1.0+rand())/(1.0+rand());
+                double num = RANDN;
                 int c = rand()%Q;
                 if (c == 0)
                 {
@@ -146,7 +147,7 @@ int main(int argc, char *argv[4])
             if (Q == 0) Q = 1;
             for (size_t j = q; j < q+R[k]; ++j)
             {
-                double num = ((rand()%2 == 1)?1.0:-1.0)*(1.0+rand())/(1.0+rand());
+                double num = RANDN;
                 int c = rand()%Q;
                 if (c == 0)
                 {
@@ -162,7 +163,7 @@ int main(int argc, char *argv[4])
         if (Q == 0) Q = 1;
         for (size_t j = N-R.back()+1, k = 0; j <= N; ++j, ++k)
         {
-            double num = ((rand()%2 == 1)?1.0:-1.0)*(1.0+rand())/(1.0+rand());
+            double num = RANDN;
             if (i == k)
             {
                 M1 << j << " " << num << '\t';
@@ -183,7 +184,7 @@ int main(int argc, char *argv[4])
     }
 
     for (size_t i = 0; i < N; ++i)
-        V << ((rand()%2 == 1)?1.0:-1.0)*(rand()%2)*(1.0 + rand())/(1.0 + rand()) << '\t';
+        V << RANDN << '\t';
     V << endl;
 
     return 0;
