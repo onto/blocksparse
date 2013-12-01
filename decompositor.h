@@ -7,33 +7,25 @@
 #include <algorithm>
 #include <queue>
 #include <cstring>
+#include <climits>
 
 #include "sparsematrix.h"
 #include "blockmatrix.h"
-
-struct DecompositorResult
-{
-    DecompositorResult() {}
-
-    std::vector<size_t> P; //Перестановка
-    std::vector<size_t> R; //Размерности блоков
-};
-
-struct Domain
-{
-    Domain(size_t index_, std::vector<size_t> nodes_):
-        index(index_),nodes(nodes_){}
-
-    size_t index;
-    std::vector<size_t> nodes;
-};
+#include "udecompositor.h"
 
 class SortHelper
 {
 public:
-    static bool comaprePairSecond(const std::pair<size_t,size_t>& p1, const std::pair<size_t,size_t>& p2)
+    static bool comaprePairSecond(const std::pair<size_t,size_t>& p1,
+                                  const std::pair<size_t,size_t>& p2)
     {
         return (p1.second > p2.second);
+    }
+
+    static bool comaprePairSecondInv(const std::pair<size_t,size_t>& p1,
+                                     const std::pair<size_t,size_t>& p2)
+    {
+        return (p1.second < p2.second);
     }
 
     static bool compareDomainSize(const Domain& d1, const Domain& d2)
@@ -42,13 +34,11 @@ public:
     }
 };
 
-class MatrixDecompositor
+class MatrixDecompositor : public SimpleMatrixDecompositor
 {
 public:
     MatrixDecompositor(const char *file);
     ~MatrixDecompositor() {}
-
-    DecompositorResult getResult();
 
 private:
     std::vector< std::vector<size_t> > H;
@@ -56,14 +46,14 @@ private:
     size_t N;
     std::vector< Domain > D;
 
-    DecompositorResult res;
-
     std::vector<size_t> colorByBFS(size_t start, size_t color);
     void recolorGroup(Domain &Dt);
     void colorGroups();
     void moveNodeToInterface(size_t index, Domain &Dt);
+    void moveNodeToInterface(size_t index);
     void decomposeMy();
     void decomposeDP(size_t M = 10);
+    void decomposeSangiovanniVincentelli();
     void printH();
 };
 
@@ -87,7 +77,7 @@ MatrixDecompositor::MatrixDecompositor(const char *file)
 
             if (c != SPARSE_END){
                 in >> x;
-                H[i].push_back(c-1);
+                if (r != c) H[i].push_back(c-1);
             } else {
                 break;
             }
@@ -95,20 +85,39 @@ MatrixDecompositor::MatrixDecompositor(const char *file)
     }
     in.close();
 
-    //std::cout << std::endl;
-    //printH();
-
     //decomposeMy();
-    decomposeDP();
+    //decomposeDP();
+    decomposeSangiovanniVincentelli();
 
+    //Заполним структуру результата
+    Pct.push_back(0);
+    for (size_t i = 1; i < D.size(); ++i)
+    {
+        if (D[i].nodes.size() == 0) continue;
+        Pct.insert(Pct.end(), D[i].nodes.begin(), D[i].nodes.end());
+        R.push_back(D[i].nodes.size());
+    }
+
+    if (D[0].nodes.size() != 0)
+    {
+        Pct.insert(Pct.end(), D[0].nodes.begin(), D[0].nodes.end());
+        R.push_back(D[0].nodes.size());
+    }
+
+    Pr.resize(N+1);
+    for (size_t i = 1; i <= N; ++i)
+    {
+        Pct[i] += 1;
+        Pr[Pct[i]] = i;
+    }
 
     std::ofstream out("permut.txt");
-    for (size_t i = 0; i < res.P.size(); ++i)
-        out << res.P[i] << " ";
+    for (size_t i = 0; i < Pr.size(); ++i)
+        out << Pr[i] << " ";
     out.close();
 
-    for (size_t i = 0; i < res.R.size(); ++i)
-        std::cout << res.R[i] << " ";
+    for (size_t i = 0; i < R.size(); ++i)
+        std::cout << R[i] << " ";
     std::cout << std::endl;
 
 
@@ -116,11 +125,6 @@ MatrixDecompositor::MatrixDecompositor(const char *file)
     H.clear();
     G.clear();
     D.clear();
-}
-
-DecompositorResult MatrixDecompositor::getResult()
-{
-    return res;
 }
 
 std::vector<size_t> MatrixDecompositor::colorByBFS(size_t start, size_t color)
@@ -199,30 +203,30 @@ void MatrixDecompositor::colorGroups()
     }
 }
 
-void MatrixDecompositor::moveNodeToInterface(size_t index, Domain& Dt)
+void MatrixDecompositor::moveNodeToInterface(size_t index)
 {
     for (size_t k = 0; k < H[index].size(); ++k)
     {
         size_t cur = H[index][k];
         if (cur == index) continue;
-        for (size_t l = 0; l < H[cur].size(); ++l)
-        {
-            if (H[cur][l] == index)
-            {
-                H[cur].erase(H[cur].begin() + l);
-                break;
-            }
-        }
+        std::vector<size_t>::iterator it = std::find(H[cur].begin(),
+                                                     H[cur].end(), index);
+        if (it != H[cur].end())
+            H[cur].erase(it);
     }
     H[index].clear();
     G[index] = 0;
-    for (size_t k = 0; k < Dt.nodes.size(); ++k)
-        if (Dt.nodes[k] == index)
-        {
-            Dt.nodes.erase(Dt.nodes.begin()+k);
-            break;
-        }
     D[0].nodes.push_back(index);
+}
+
+void MatrixDecompositor::moveNodeToInterface(size_t index, Domain& Dt)
+{
+    moveNodeToInterface(index);
+
+    std::vector<size_t>::iterator it = std::find(Dt.nodes.begin(),
+                                                 Dt.nodes.end(), index);
+    if (it != Dt.nodes.end())
+        Dt.nodes.erase(it);
 }
 
 void MatrixDecompositor::decomposeMy()
@@ -311,16 +315,6 @@ void MatrixDecompositor::decomposeMy()
 
         if (nothingtoremove) break;
     }
-
-    //Заполним структуру результата
-    for (size_t i = 1; i < D.size(); ++i)
-    {
-        res.P.insert(res.P.end(), D[i].nodes.begin(), D[i].nodes.end());
-        res.R.push_back(D[i].nodes.size());
-    }
-
-    res.P.insert(res.P.end(), D[0].nodes.begin(), D[0].nodes.end());
-    res.R.push_back(D[0].nodes.size());
 }
 
 void MatrixDecompositor::decomposeDP(size_t M)
@@ -344,7 +338,7 @@ void MatrixDecompositor::decomposeDP(size_t M)
     for (size_t i = 0; i < H.size(); ++i)
         LS.push_back( std::pair<size_t,size_t>( i, H[i].size() ) );
 
-    std::sort(LS.begin(), LS.end(), SortHelper::comaprePairSecond);
+    std::sort(LS.begin(), LS.end(), SortHelper::comaprePairSecondInv);
 
     for (size_t i = 0; i < M; ++i)
     {
@@ -400,17 +394,138 @@ void MatrixDecompositor::decomposeDP(size_t M)
     for (size_t i = 0; i < N; ++i)
         if (G[i] == 0)
             D[M+1].nodes.push_back(i);
+}
 
-    //Заполним структуру результата
-    for (size_t i = 1; i < D.size(); ++i)
+void MatrixDecompositor::decomposeSangiovanniVincentelli()
+{
+    std::vector<size_t> cn;
+    std::vector<size_t> is;
+    std::vector<size_t> asn, asp;
+    std::vector<bool> isInterface(N, false);
+
+    G.assign(N,N);
+
+    D.clear();
+    D.push_back( Domain(0, std::vector<size_t>()) );
+    D.push_back( Domain(1, std::vector<size_t>()) );
+
+    //Вот это определим сами
+    size_t Nmax = N / 10.;
+
+    //Step 1
+    //Найдем initial iterating node
+    //с минимальным количеством связей
+    size_t in = 0, asmin = ULONG_MAX;
+    for (size_t i = 0; i < N; ++i)
     {
-        res.P.insert(res.P.end(), D[i].nodes.begin(), D[i].nodes.end());
-        res.R.push_back(D[i].nodes.size());
+        if (H[i].size() < asmin)
+        {
+            asmin = H[i].size();
+            in = i;
+        }
     }
 
-    res.P.insert(res.P.end(), D[0].nodes.begin(), D[0].nodes.end());
-    res.R.push_back(D[0].nodes.size());
+    //Step 2-4
+    asn = H[in];
+    cn.push_back(asmin);
+    is.push_back(in);
+    D.back().nodes.push_back(in);
+    G[in] = 1;
+
+    for (size_t i = 1; i < N; ++i)
+    {
+        asp = asn; //Запомним AS(i-1), вдруг это bottleneck? Тогда будем переносить в интерфейс.
+
+        //Что делать если CN(i-1) == 0?
+        //Делаем так же как и на первом шаге для тех элементов, что не в группах
+        //и не в интерфейсе
+        if (cn[i-1] == 0)
+        {
+            in = 0, asmin = ULONG_MAX;
+            for (size_t i = 0; i < N; ++i)
+            {
+                if ((G[i] == N) && (!isInterface[i]) && (H[i].size() < asmin))
+                {
+                    asmin = H[i].size();
+                    in = i;
+                }
+            }
+            asn = H[in];
+            D.push_back( Domain(1, std::vector<size_t>()) );
+        }
+        else
+        {
+            //Step 6
+            //Выбор next iterating node
+            //используя greedly strategy
+
+            //Мы должны выбрать IS(i) с минимальным CN(i)
+            std::vector<size_t> asadd, asaddopt;
+            size_t addmin = ULONG_MAX;
+            size_t inindx = 0;
+
+#pragma omp parallel for private (asadd)
+            for (size_t j = 0; j < asp.size(); ++j)
+            {
+                size_t cur = asp[j];
+                asadd.clear();
+
+                //Переберем соседей, если они не в IS(0) U ... U IS(i-1), те
+                //соседей которые еще не входят ни в одну группу
+                //и не в AS(i-1), то добавим в asadd
+                for (size_t k = 0; k < H[cur].size(); ++k)
+                {
+                    size_t adj = H[cur][k];
+                    if ((std::find(asp.begin(),asp.end(), adj) == asp.end()) &&
+                        (G[adj] == N))
+                    {
+                        asadd.push_back(adj);
+                    }
+
+                }
+
+#pragma omp critical
+                if (asadd.size() < addmin)
+                {
+                    in = cur;
+                    inindx = j;
+                    addmin = asadd.size();
+                    asaddopt = asadd;
+                }
+            }
+            asn.erase(asn.begin()+inindx);
+            asn.insert(asn.end(),asaddopt.begin(),asaddopt.end());
+        }
+
+        //Step 7-8
+        cn.push_back(asn.size());
+        is.push_back(in);
+
+        //Вроде как определение локального минимума
+        //И тут перенос в интерфейс всех узлов из AS(i-1)
+        if ((D.back().nodes.size() > 0.75*Nmax) && (cn[i-2] >= cn[i-1]) && (cn[i-1] < cn[i]))
+        {
+            for (size_t j = 0; j < asp.size(); ++j)
+            {
+                size_t rem = asp[j];
+                if (isInterface[rem]) continue;
+                moveNodeToInterface(rem);
+                isInterface[rem] = true;
+            }
+
+            D.push_back( Domain(1, std::vector<size_t>()) );
+        }
+        else
+        {
+            if (!isInterface[in])
+            {
+                D.back().nodes.push_back(in);
+                G[in] = 1;
+            }
+        }
+    }
 }
+
 
 void MatrixDecompositor::printH()
 {

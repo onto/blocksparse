@@ -11,6 +11,7 @@ struct LUPS
     SparseMatrix U;
     std::vector<size_t> LF;
     std::vector<size_t> P;
+    std::vector<size_t> Pt;
 
     void printL() const
     {
@@ -38,6 +39,7 @@ struct LUPM
 {
     Matrix M;
     std::vector<size_t> P;
+    std::vector<size_t> Pt;
 
     void printL() const
     {
@@ -66,12 +68,11 @@ struct LUPM
 
 struct FactorizedBlockSparseMatrix
 {
-    std::vector< Matrix > Ainv;      // Ainv_i = inv(A_i)
-    std::vector< SparseMatrix > B;   // B_i - r_i x r_q
-    std::vector< SparseMatrix > C;   // C_i - r_q x r_i
-    SparseMatrix Q;                  // Q - r_q x r_q
-    LUPM H;                          // H = LUTriang(Q - sum(C_i * Ainv_i * B_i))
-    std::vector<size_t> R;           // r_1--r_q
+    std::vector< LUPS > Alu;
+    std::vector< Matrix > Bh;
+    std::vector< SparseMatrix > C;
+    LUPM H;
+    std::vector<size_t> R;
 };
 
 #endif // LUCONTAINER_H

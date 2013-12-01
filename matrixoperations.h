@@ -22,7 +22,7 @@ public:
     static bool LUTriang(SparseMatrix &M, LUPS &_M, double pivRel = 0.001);
     static bool LUTriang(Matrix &M, LUPM &_M);
 
-    static bool Solve(LUPS &M, Vector &B, Vector &X, bool transp = true);
+    static bool Solve(LUPS &M, Vector &B, Vector &X);
     static bool Solve(LUPM &M, Vector &B, Vector &X);
 
     static bool Inverse(SparseMatrix &M, Matrix &_M);
@@ -45,6 +45,7 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
     _M.U = M;
     _M.LF.assign(H+1, SPARSE_END);
     _M.P.resize(H+H+1);
+    _M.Pt.resize(H+H+1);
     for (size_t i = 1; i <= H; ++i) _M.P[i] = _M.P[H+i] = i;
 
     // Массив "указателей" на последний элемент матрицы L, чтобы можно было
@@ -191,20 +192,18 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
         }
     }
 
+    for (size_t i = 1; i <= H; ++i)
+    {
+        _M.Pt[_M.P[i]] = i;
+        _M.Pt[H+_M.P[H+i]] = i;
+    }
+
     return true;
 }
 
-bool MatrixOperations::Solve(LUPS &_M, Vector &B, Vector &X, bool transp)
+bool MatrixOperations::Solve(LUPS &_M, Vector &B, Vector &X)
 {
     size_t H = _M.U.H;
-
-    // Транспонируем P для столбцов
-    if (transp)
-    {
-        std::vector<size_t> P(H+1);
-        for (size_t i = 1; i <= H; ++i) P[_M.P[H+i]] = i;
-        memcpy(&(_M.P[H+1]),&P[1], H*sizeof(size_t));
-    }
 
     X.zeros(H);
 
@@ -232,7 +231,7 @@ bool MatrixOperations::Solve(LUPS &_M, Vector &B, Vector &X, bool transp)
     }
 
     std::vector<double> XX = X.V;
-    for (size_t i = 1; i <= H; ++i) X.V[i] = XX[_M.P[H+i]];
+    for (size_t i = 1; i <= H; ++i) X.V[i] = XX[_M.Pt[H+i]];
 
     return true;
 }
@@ -246,12 +245,6 @@ bool MatrixOperations::Inverse(SparseMatrix &M, Matrix &_M)
 
     _M.zeros(H, H);
 
-    // Сначала транспонируем матрицу перестановок для столбцов,
-    // чтобы не делать этого каждый раз
-    std::vector<size_t> P(H+1);
-    for (size_t i = 1; i <= H; ++i) P[LU.P[H+i]] = i;
-    memcpy(&(LU.P[H+1]), &P[1], H*sizeof(size_t));
-
 #ifndef __NVCC__
 
     Vector B(H);
@@ -263,7 +256,7 @@ bool MatrixOperations::Inverse(SparseMatrix &M, Matrix &_M)
         B.V[i-1] = 0;
         B.V[i] = 1.0;
 
-        if (!Solve(LU, B, X, false)) return false;
+        if (!Solve(LU, B, X)) return false;
 
         for (size_t j = 1; j <= H; ++j)
             _M.M[_M.W*(j-1)+i] = X.V[j];
@@ -347,6 +340,7 @@ bool MatrixOperations::LUTriang(Matrix &M, LUPM &_M)
 
     _M.M = M;
     _M.P.resize(H+H+1);
+    _M.Pt.resize(H+H+1);
 #pragma omp parallel for
     for (size_t i = 1; i <= H; ++i) _M.P[i] = _M.P[H+i] = i;
 
@@ -397,16 +391,18 @@ bool MatrixOperations::LUTriang(Matrix &M, LUPM &_M)
         }
     }
 
+    for (size_t i = 1; i <= H; ++i)
+    {
+        _M.Pt[_M.P[i]] = i;
+        _M.Pt[H+_M.P[H+i]] = i;
+    }
+
     return true;
 }
 
 bool MatrixOperations::Solve(LUPM &_M, Vector &B, Vector &X)
 {
     size_t H = _M.M.H;
-
-    // Транспонируем P для столбцов
-    std::vector<size_t> P(H+1);
-    for (size_t i = 1; i <= H; ++i) P[_M.P[H+i]] = i;
 
     X.zeros(H);
 
@@ -433,7 +429,7 @@ bool MatrixOperations::Solve(LUPM &_M, Vector &B, Vector &X)
     }
 
     std::vector<double> XX = X.V;
-    for (size_t i = 1; i <= H; ++i) X.V[i] = XX[P[i]];
+    for (size_t i = 1; i <= H; ++i) X.V[i] = XX[_M.Pt[H+i]];
 
     return true;
 }
@@ -466,30 +462,46 @@ bool MatrixOperations::Inverse(Matrix &M, Matrix &_M)
 bool MatrixOperations::BlockMatrixFactorization(BlockSparseMatrix &M,
                                                 FactorizedBlockSparseMatrix &_M)
 {
-    _M.B = M.B;
     _M.C = M.C;
-    _M.Q = M.Q;
     _M.R = M.R;
 
     size_t N = _M.R.size()-1;
 
-    // Инвертируем A_i
+    //Раскладываем A_i
+    _M.Alu.resize(N);
+#pragma omp parallel for
     for (size_t i = 0; i < N; ++i)
-        _M.Ainv.push_back(Matrix(M.R[i]));
+    {
+        LUTriang(M.A[i], _M.Alu[i]);
+    }
+
+    //Рассчитываем inv(A_i)*B_i = Bh_i
+    for (size_t i = 0; i < N; ++i)
+        _M.Bh.push_back(Matrix(M.B[i]));
 
 #pragma omp parallel for
     for (size_t i = 0; i < N; ++i)
     {
-        Inverse(M.A[i], _M.Ainv[i]);
+        size_t H = _M.Bh[i].H;
+        Vector b(H), x(H);
+        for (size_t j = 1; j <= _M.Bh[i].W; ++j)
+        {
+            for (size_t k = 1; k <= H; ++k)
+                b.V[k] = _M.Bh[i].get(k,j);
+
+            Solve(_M.Alu[i], b, x);
+
+            for (size_t k = 1; k <= H; ++k)
+                _M.Bh[i].set(k, j, x.V[k]);
+        }
     }
 
-    // Считаем матрицу H
-    Matrix H(_M.R.back());
+    // Рассчитаем матрицу H
+    Matrix H(M.Q);
     for (size_t i = 0; i < N; ++i)
     {
-        H -= _M.C[i]*_M.Ainv[i]*_M.B[i];
+        H -= _M.C[i]*_M.Bh[i];
     }
-    H += _M.Q;
 
     // И раскладываем H
     if (!LUTriang(H, _M.H)) return false;
@@ -500,8 +512,6 @@ bool MatrixOperations::BlockMatrixFactorization(BlockSparseMatrix &M,
 bool MatrixOperations::Solve(FactorizedBlockSparseMatrix &M, Vector &B,
                              Vector &X)
 {
-    std::vector< Vector >b;
-
     size_t N = M.R.size()-1;
 
     size_t q = 1;
@@ -513,36 +523,41 @@ bool MatrixOperations::Solve(FactorizedBlockSparseMatrix &M, Vector &B,
     }
     qI[N+1] = q;
 
-    b.resize(N+1);
+    std::vector< Vector >bh(N);
 #pragma omp parallel for
-    for (size_t i = 0; i <= N; ++i)
-    {
-        std::vector<double> t;
-        t.assign(B.V.begin()+qI[i], B.V.begin()+qI[i+1]);
-        t.insert(t.begin(), 0);
-        b[i].H = M.R[i];
-        b[i].V = t;
-    }
-
-    X = Vector(B.H);
-
-    Vector v = b.back();
     for (size_t i = 0; i < N; ++i)
     {
-        v -= M.C[i]*(M.Ainv[i]*b[i]);
+        Vector b;
+        b.H = M.R[i];
+        b.V.push_back(0);
+        b.V.insert(b.V.end(), B.V.begin()+qI[i], B.V.begin()+qI[i+1]);
+
+        Solve(M.Alu[i], b, bh[i]);
+    }
+
+    Vector v;
+    v.H = M.R.back();
+    v.V.push_back(0);
+    v.V.insert(v.V.end(), B.V.begin()+qI[N], B.V.begin()+qI[N+1]);
+
+    for (size_t i = 0; i < N; ++i)
+    {
+        v -= M.C[i]*bh[i];
     }
 
     Vector X_q;
     if (!Solve(M.H, v, X_q)) return false;
 
+    X.resize(B.H);
+
+//#pragma omp parallel for
     for (size_t i = 0; i < N; ++i)
     {
-        Vector X_i = M.Ainv[i]*(b[i]-M.B[i]*X_q);
+        Vector X_i = bh[i]-M.Bh[i]*X_q;
         memcpy(&(X.V[qI[i]]),&(X_i.V[1]),M.R[i]*sizeof(double));
     }
 
-    q = qI[N];
-    memcpy(&(X.V[q]),&(X_q.V[1]),M.R.back()*sizeof(double));
+    memcpy(&(X.V[qI[N]]),&(X_q.V[1]),M.R.back()*sizeof(double));
 
     return true;
 }

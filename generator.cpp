@@ -23,14 +23,14 @@ int main(int argc, char *argv[4])
 
         srand(time(NULL));
 
-        //size_t q;
+        size_t q;
 
         for (size_t i = 1; i <= N; ++i)
         {
-            //q = (i==N)?N:rand()%(N-i) + i+1;
+            q = (i==N)?N:rand()%(N-i) + i+1;
             for (size_t j = i+1; j <= N; ++j)
             {
-                if (rand()%p == 0)// || (j == q))
+                if ((rand()%p == 0) || (j == q))
                 {
                     S.set(i, j, RANDN);
                     S.set(j, i, RANDN);

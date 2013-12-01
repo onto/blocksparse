@@ -3,7 +3,9 @@ CONFIG += console
 CONFIG -= qt
 
 SOURCES += \
-    main.cpp
+    main.cpp \
+    matrix.cpp \
+    sparsematrix.cpp
 
 HEADERS += \
     sparsematrix.h \
@@ -12,8 +14,9 @@ HEADERS += \
     matrixoperations.h \
     matrixcontainers.h \
     cudaoperations.h \
-    decompositor.h
+    decompositor.h \
+    udecompositor.h
 
-QMAKE_CXXFLAGS += -fopenmp -Wextra
+QMAKE_CXXFLAGS += -Wextra -fopenmp
 QMAKE_LFLAGS += -fopenmp
 
