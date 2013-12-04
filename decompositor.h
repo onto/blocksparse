@@ -205,6 +205,7 @@ void MatrixDecompositor::colorGroups()
 
 void MatrixDecompositor::moveNodeToInterface(size_t index)
 {
+#pragma omp parallel for
     for (size_t k = 0; k < H[index].size(); ++k)
     {
         size_t cur = H[index][k];
@@ -401,7 +402,6 @@ void MatrixDecompositor::decomposeSangiovanniVincentelli()
     std::vector<size_t> cn;
     std::vector<size_t> is;
     std::vector<size_t> asn, asp;
-    std::vector<bool> isInterface(N, false);
 
     G.assign(N,N);
 
@@ -438,13 +438,12 @@ void MatrixDecompositor::decomposeSangiovanniVincentelli()
 
         //Что делать если CN(i-1) == 0?
         //Делаем так же как и на первом шаге для тех элементов, что не в группах
-        //и не в интерфейсе
         if (cn[i-1] == 0)
         {
             in = 0, asmin = ULONG_MAX;
             for (size_t i = 0; i < N; ++i)
             {
-                if ((G[i] == N) && (!isInterface[i]) && (H[i].size() < asmin))
+                if ((G[i] == N) && (H[i].size() < asmin))
                 {
                     asmin = H[i].size();
                     in = i;
@@ -508,16 +507,15 @@ void MatrixDecompositor::decomposeSangiovanniVincentelli()
             for (size_t j = 0; j < asp.size(); ++j)
             {
                 size_t rem = asp[j];
-                if (isInterface[rem]) continue;
+                if (G[rem] == 0) continue;
                 moveNodeToInterface(rem);
-                isInterface[rem] = true;
             }
 
             D.push_back( Domain(1, std::vector<size_t>()) );
         }
         else
         {
-            if (!isInterface[in])
+            if (G[in] != 0)
             {
                 D.back().nodes.push_back(in);
                 G[in] = 1;
