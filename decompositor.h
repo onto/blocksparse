@@ -13,27 +13,6 @@
 #include "blockmatrix.h"
 #include "udecompositor.h"
 
-class SortHelper
-{
-public:
-    static bool comaprePairSecond(const std::pair<size_t,size_t>& p1,
-                                  const std::pair<size_t,size_t>& p2)
-    {
-        return (p1.second > p2.second);
-    }
-
-    static bool comaprePairSecondInv(const std::pair<size_t,size_t>& p1,
-                                     const std::pair<size_t,size_t>& p2)
-    {
-        return (p1.second < p2.second);
-    }
-
-    static bool compareDomainSize(const Domain& d1, const Domain& d2)
-    {
-        return (d1.nodes.size() > d2.nodes.size());
-    }
-};
-
 class MatrixDecompositor : public SimpleMatrixDecompositor
 {
 public:
@@ -42,7 +21,7 @@ public:
 
 private:
     std::vector< std::vector<size_t> > H;
-    size_t N;
+    size_t N, unusedcount;
     std::vector< std::vector<size_t> > D;
     std::vector<bool> U, I;
 
@@ -103,15 +82,9 @@ MatrixDecompositor::MatrixDecompositor(const char *file)
         Pr[Pct[i]] = i;
     }
 
-    std::ofstream out("permut.txt");
-    for (size_t i = 0; i < Pr.size(); ++i)
-        out << Pr[i] << " ";
-    out.close();
-
     for (size_t i = 0; i < R.size(); ++i)
         std::cout << R[i] << " ";
     std::cout << std::endl;
-
 
     //Освободим память
     H.clear();
@@ -122,6 +95,8 @@ MatrixDecompositor::MatrixDecompositor(const char *file)
 
 void MatrixDecompositor::moveNodeToInterface(size_t index)
 {
+    if (I[index]) return;
+
 #pragma omp parallel for
     for (size_t k = 0; k < H[index].size(); ++k)
     {
@@ -133,15 +108,19 @@ void MatrixDecompositor::moveNodeToInterface(size_t index)
             H[cur].erase(it);
     }
     H[index].clear();
-    I[index] = true; U[index] = true;
+    I[index] = true;
+    if (!U[index])
+    {
+        U[index] = true;
+        --unusedcount;
+    }
     D[0].push_back(index);
 }
 
 void MatrixDecompositor::decomposeSangiovanniVincentelli()
 {
     std::vector<size_t> cn;
-    std::vector<size_t> is;
-    std::vector<size_t> asn, asp;
+    std::vector<size_t> asn;
 
     U.assign(N,false);
     I.assign(N,false);
@@ -151,7 +130,8 @@ void MatrixDecompositor::decomposeSangiovanniVincentelli()
     D.push_back( std::vector<size_t>() );
 
     //Вот это определим сами
-    size_t Nmax = N / 10.;
+    size_t Nmax = std::max(2, int(N) / 10);
+    size_t Nmin = 0.75*Nmax;
 
     //Step 1
     //Найдем initial iterating node
@@ -169,25 +149,29 @@ void MatrixDecompositor::decomposeSangiovanniVincentelli()
     //Step 2-4
     asn = H[in];
     cn.push_back(asmin);
-    is.push_back(in);
     D.back().push_back(in);
     U[in] = true;
 
-    for (size_t i = 1; i < N; ++i)
+    std::vector<size_t> mincontour;
+    size_t minconsize = ULONG_MAX, dsize = 0;
+
+    unusedcount = N-1;
+    size_t i = 0;
+    while (unusedcount > 0)//for (size_t i = 1; i < N; ++i)
     {
-        asp = asn; //Запомним AS(i-1), вдруг это bottleneck? Тогда будем переносить в интерфейс.
+        ++i;
 
         //Что делать если CN(i-1) == 0?
         //Делаем так же как и на первом шаге для тех элементов, что не в группах
         if (cn[i-1] == 0)
         {
             in = 0, asmin = ULONG_MAX;
-            for (size_t i = 0; i < N; ++i)
+            for (size_t j = 0; j < N; ++j)
             {
-                if ((!U[i]) && (H[i].size() < asmin))
+                if ((!U[j]) && (H[j].size() < asmin))
                 {
-                    asmin = H[i].size();
-                    in = i;
+                    asmin = H[j].size();
+                    in = j;
                 }
             }
             asn = H[in];
@@ -205,21 +189,23 @@ void MatrixDecompositor::decomposeSangiovanniVincentelli()
             size_t inindx = 0;
 
 #pragma omp parallel for private (asadd)
-            for (size_t j = 0; j < asp.size(); ++j)
+            for (size_t j = 0; j < asn.size(); ++j)
             {
-                size_t cur = asp[j];
+                size_t cur = asn[j];
                 asadd.clear();
 
                 //Переберем соседей, если они не в IS(0) U ... U IS(i-1), те
                 //соседей которые еще не входят ни в одну группу
                 //и не в AS(i-1), то добавим в asadd
+                size_t adj, addsize = 0;
                 for (size_t k = 0; k < H[cur].size(); ++k)
                 {
-                    size_t adj = H[cur][k];
+                    adj = H[cur][k];
                     if ((!U[adj]) &&
-                        (std::find(asp.begin(),asp.end(), adj) == asp.end()))
+                        (std::find(asn.begin(),asn.end(), adj) == asn.end()))
                     {
                         asadd.push_back(adj);
+                        if(++addsize >= addmin) break;
                     }
                 }
 
@@ -238,27 +224,60 @@ void MatrixDecompositor::decomposeSangiovanniVincentelli()
 
         //Step 7-8
         cn.push_back(asn.size());
-        is.push_back(in);
 
-        //Вроде как определение локального минимума
-        //И тут перенос в интерфейс всех узлов из AS(i-1)
-        if ((D.back().size() > 0.75*Nmax) && (cn[i-2] >= cn[i-1]) && (cn[i-1] < cn[i]))
+        if (!I[in])
         {
-            for (size_t j = 0; j < asp.size(); ++j)
+            D.back().push_back(in);
+            U[in] = true;
+            --unusedcount;
+        }
+
+        if (D.back().size() >= Nmin)
+        {
+            if (cn.back() <= minconsize)
             {
-                size_t rem = asp[j];
-                if (I[rem]) continue;
-                moveNodeToInterface(rem);
+                minconsize = cn.back();
+                mincontour = asn;
+                dsize = D.back().size();
             }
 
-            D.push_back( std::vector<size_t>() );
-        }
-        else
-        {
-            if (!I[in])
+            if (D.back().size() == Nmax)
             {
-                D.back().push_back(in);
-                U[in] = true;
+                for (size_t j = 0; j < mincontour.size(); ++j)
+                    moveNodeToInterface(mincontour[j]);
+
+                if (dsize == D.back().size())
+                {
+                    cn.back() = 0;
+                }
+                else
+                {
+                    std::vector<size_t> dadd;
+                    dadd.assign(D.back().begin()+dsize, D.back().end());
+                    D.back().resize(dsize);
+
+                    D.push_back( std::vector<size_t>() );
+
+                    for (size_t j = 0; j < dadd.size(); ++j)
+                    {
+                        if (!I[dadd[j]])
+                            D.back().push_back(dadd[j]);
+
+                        std::vector<size_t>::iterator it = std::find(asn.begin(), asn.end(), dadd[j]);
+                        if (it != asn.end())
+                            asn.erase(it);
+                    }
+
+                    if (D.back().size() == 0)
+                    {
+                        D.pop_back();
+                        cn.back() = 0;
+                    }
+                }
+
+                minconsize = ULONG_MAX;
+                mincontour.clear();
+                dsize = 0;
             }
         }
     }

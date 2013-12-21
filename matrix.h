@@ -57,8 +57,8 @@ public:
     size_t H;
     size_t W;
 
-    inline double get(size_t row, size_t col) const;
-    inline void set(size_t row, size_t col, double value);
+    double get(size_t row, size_t col) const;
+    void set(size_t row, size_t col, double value);
     void zeros(size_t h, size_t w);
     void print() const;
 

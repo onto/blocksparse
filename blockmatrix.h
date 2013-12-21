@@ -137,24 +137,6 @@ private:
 
         S.save2file("matrix.perm.txt");
 
-//        std::ofstream out("matrix.temp.txt");
-
-//        for (size_t i = 0; i < R.size(); ++i)
-//            out << R[i] << " ";
-//        out <<"0\n";
-
-//        for (size_t i = 1; i <= S.H; ++i)
-//        {
-//            for (size_t q = S.F[i]; q != SPARSE_END; q = S.N[q])
-//            {
-//                out << S.C[q] << " " << S.V[q] << '\t';
-//            }
-//            out << "0\n";
-//        }
-//        out.close();
-
-//        readBlockMatrix("matrix.temp.txt");
-
         //Теперь надо заполнить A, B, C, Q
         size_t qn = 0, qp = 0, c, qb = S.H - R.back();
         for (size_t k = 0; k < R.size()-1; ++k)
@@ -215,7 +197,7 @@ private:
         SparseMatrix S(file);
         S.permute(D.Pc, D.Pc);
 
-        S.save2file("matrix.perm.txt");
+        //S.save2file("matrix.perm.txt");
 
 //        std::ofstream out("matrix.temp.txt");
 

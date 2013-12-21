@@ -62,12 +62,12 @@ Matrix::Matrix(const SparseMatrix &S)
     }
 }
 
-inline double Matrix::get(size_t row, size_t col) const
+double Matrix::get(size_t row, size_t col) const
 {
     return M[W*(row-1)+col];
 }
 
-inline void Matrix::set(size_t row, size_t col, double value)
+void Matrix::set(size_t row, size_t col, double value)
 {
     M[W*(row-1)+col] = value;
 }
