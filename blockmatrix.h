@@ -7,7 +7,6 @@
 
 #include "sparsematrix.h"
 #include "decompositor.h"
-#include "udecompositor.h"
 
 struct BlockSparseMatrix
 {
@@ -17,15 +16,15 @@ struct BlockSparseMatrix
     SparseMatrix Q;                  // Q - r_q x r_q
     std::vector<size_t> R;           // r_1--r_q
 
-    SimpleMatrixDecompositor D;
+    MatrixDecompositor D;
 
     bool unsimmetric;
 
     enum InputType
     {
-        BlockMatrixInputType = 0,
-        SparseMatrixInputType,
-        SparseMatrixUnsimmetricInputType
+        BlockMatrixIT = 0,
+        SparseMatrixIT,
+        UnsimmetricSparseMatrixIT
     };
 
     BlockSparseMatrix() {}
@@ -33,16 +32,14 @@ struct BlockSparseMatrix
     BlockSparseMatrix(const char *file, InputType type)
     {
         switch (type) {
-        case BlockMatrixInputType:
+        case BlockMatrixIT:
             readBlockMatrix(file);
             break;
-        case SparseMatrixInputType:
-            unsimmetric = false;
-            readSparseMatrixAndDecompose(file);
+        case SparseMatrixIT:
+            readSparseMatrixAndDecompose(file, true);
             break;
-        case SparseMatrixUnsimmetricInputType:
-            unsimmetric = true;
-            readUnsimmetricSparseMatrixAndDecompose(file);
+        case UnsimmetricSparseMatrixIT:
+            readSparseMatrixAndDecompose(file, false);
             break;
         default:
             break;
@@ -125,9 +122,9 @@ private:
         in.close();
     }
 
-    void readSparseMatrixAndDecompose(const char *file)
+    void readSparseMatrixAndDecompose(const char *file, bool sim)
     {
-        MatrixDecompositor Dt(file);
+        MatrixDecompositor Dt(file, sim);
         D = Dt;
         R = Dt.R;
 
@@ -137,67 +134,10 @@ private:
 
         S.save2file("matrix.perm.txt");
 
-        //Теперь надо заполнить A, B, C, Q
-        size_t qn = 0, qp = 0, c, qb = S.H - R.back();
-        for (size_t k = 0; k < R.size()-1; ++k)
-        {
-            qp = qn;
-            qn += R[k];
-
-            A.push_back(SparseMatrix(R[k], R[k]));
-            B.push_back(SparseMatrix(R[k], R.back()));
-            C.push_back(SparseMatrix(R.back(), R[k]));
-            for (size_t i = 1; i <= R[k]; ++i)
-            {
-                for (size_t q = S.F[qp+i]; q != SPARSE_END; q = S.N[q])
-                {
-                    c = S.C[q];
-                    if (c <= qn)
-                        A[k].add(i, c-qp, S.V[q]);
-                    else
-                        B[k].add(i, c-qb, S.V[q]);
-                }
-            }
-        }
-
-        Q = SparseMatrix(R.back(),R.back());
-
-        for (size_t i = 1; i <= R.back(); ++i)
-        {
-            qp = 0; qn = R[0];
-            size_t k = 0, q;
-            for (q = S.F[qb+i]; q != SPARSE_END; q = S.N[q])
-            {
-                c = S.C[q];
-                while (c > qn)
-                {
-                    qp = qn;
-                    ++k;
-                    qn += R[k];
-                }
-                if (k == R.size()-1) break;
-
-                C[k].add(i, c-qp, S.V[q]);
-            }
-
-            for (; q != SPARSE_END; q = S.N[q])
-            {
-                Q.add(i, S.C[q] - qb, S.V[q]);
-            }
-        }
-    }
-
-    void readUnsimmetricSparseMatrixAndDecompose(const char *file)
-    {
-        MatrixUDecompositor Dt(file);
-        D = Dt;
-        R = Dt.R;
-
-        //Теперь считываем, производя перестановку
-        SparseMatrix S(file);
-        S.permute(D.Pc, D.Pc);
-
-        //S.save2file("matrix.perm.txt");
+        std::ofstream out("matrix.blocks.txt");
+        for (size_t i = 0; i < R.size(); ++i)
+            out << R[i] << " ";
+        out.close();
 
 //        std::ofstream out("matrix.temp.txt");
 

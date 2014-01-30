@@ -11,51 +11,92 @@
 
 #include "sparsematrix.h"
 #include "blockmatrix.h"
-#include "udecompositor.h"
 
-class MatrixDecompositor : public SimpleMatrixDecompositor
+class MatrixDecompositor
 {
 public:
-    MatrixDecompositor(const char *file);
+    MatrixDecompositor(const char *file, bool sim);
+    MatrixDecompositor() {}
     ~MatrixDecompositor() {}
+
+    std::vector<size_t> Pr, Pct, R;
 
 private:
     std::vector< std::vector<size_t> > H;
     size_t N, unusedcount;
     std::vector< std::vector<size_t> > D;
-    std::vector<bool> U, I;
+    std::vector<bool> U, I, HD;
+
 
     void moveNodeToInterface(size_t index);
     void decomposeSangiovanniVincentelli();
     void printH();
 };
 
-MatrixDecompositor::MatrixDecompositor(const char *file)
+MatrixDecompositor::MatrixDecompositor(const char *file, bool sim)
 {
     std::ifstream in(file);
 
     in >> N >> N;
 
     H.assign(N, std::vector<size_t>());
+    HD.assign(N, false);
 
     double x;
     size_t c;
 
     //Сначала считаем только связи
-    for (size_t r = 1, i = 0; r <= N; ++r, ++i)
-    {
-        while (true)
-        {
-            in >> c;
 
-            if (c != SPARSE_END){
-                in >> x;
-                if (r != c) H[i].push_back(c-1);
-            } else {
-                break;
+    if (sim) //Для симметричной матрицы
+    {
+        for (size_t r = 1, i = 0; r <= N; ++r, ++i)
+        {
+            while (true)
+            {
+                in >> c;
+
+                if (c != SPARSE_END){
+                    in >> x;
+                    if (r != c) H[i].push_back(c-1);
+                    else HD[i] = true;
+                } else {
+                    break;
+                }
             }
         }
     }
+    else //Для несимметричной матрицы
+    {
+        for (size_t r = 1; r <= N; ++r)
+        {
+            while (true)
+            {
+                in >> c;
+
+                if (c != SPARSE_END){
+                    in >> x;
+                    if (r != c)
+                    {
+                        H[r-1].push_back(c-1);
+                        H[c-1].push_back(r-1);
+                    }
+                    else
+                    {
+                        HD[r-1] = true;
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+
+        for (size_t i = 0; i < N; ++i)
+        {
+            std::sort(H[i].begin(), H[i].end());
+            H[i].resize(std::distance(H[i].begin(), std::unique(H[i].begin(), H[i].end())));
+        }
+    }
+
     in.close();
 
     decomposeSangiovanniVincentelli();
@@ -97,7 +138,7 @@ void MatrixDecompositor::moveNodeToInterface(size_t index)
 {
     if (I[index]) return;
 
-#pragma omp parallel for
+//#pragma omp parallel for
     for (size_t k = 0; k < H[index].size(); ++k)
     {
         size_t cur = H[index][k];
@@ -119,8 +160,8 @@ void MatrixDecompositor::moveNodeToInterface(size_t index)
 
 void MatrixDecompositor::decomposeSangiovanniVincentelli()
 {
-    std::vector<size_t> cn;
-    std::vector<size_t> asn;
+    size_t cn;
+    std::vector<size_t> as;
 
     U.assign(N,false);
     I.assign(N,false);
@@ -147,24 +188,32 @@ void MatrixDecompositor::decomposeSangiovanniVincentelli()
     }
 
     //Step 2-4
-    asn = H[in];
-    cn.push_back(asmin);
+    as = H[in];
+    cn = asmin;
     D.back().push_back(in);
     U[in] = true;
 
     std::vector<size_t> mincontour;
-    size_t minconsize = ULONG_MAX, dsize = 0;
+    size_t minconsize = ULONG_MAX, dsize = 0, domainsize = 1;
 
     unusedcount = N-1;
-    size_t i = 0;
     while (unusedcount > 0)//for (size_t i = 1; i < N; ++i)
     {
-        ++i;
 
         //Что делать если CN(i-1) == 0?
         //Делаем так же как и на первом шаге для тех элементов, что не в группах
-        if (cn[i-1] == 0)
+        if (cn == 0)
         {
+            if (D.back().size() == 1)
+            {
+                size_t index = D.back()[0];
+                if (!HD[index])
+                {
+                    moveNodeToInterface(index);
+                    D.pop_back();
+                }
+            }
+
             in = 0, asmin = ULONG_MAX;
             for (size_t j = 0; j < N; ++j)
             {
@@ -174,8 +223,13 @@ void MatrixDecompositor::decomposeSangiovanniVincentelli()
                     in = j;
                 }
             }
-            asn = H[in];
+            as = H[in];
             D.push_back( std::vector<size_t>() );
+
+            minconsize = ULONG_MAX;
+            mincontour.clear();
+            dsize = 0;
+            domainsize = 0;
         }
         else
         {
@@ -188,10 +242,10 @@ void MatrixDecompositor::decomposeSangiovanniVincentelli()
             size_t addmin = ULONG_MAX;
             size_t inindx = 0;
 
-#pragma omp parallel for private (asadd)
-            for (size_t j = 0; j < asn.size(); ++j)
+//#pragma omp parallel for private (asadd)
+            for (size_t j = 0; j < as.size(); ++j)
             {
-                size_t cur = asn[j];
+                size_t cur = as[j];
                 asadd.clear();
 
                 //Переберем соседей, если они не в IS(0) U ... U IS(i-1), те
@@ -202,82 +256,74 @@ void MatrixDecompositor::decomposeSangiovanniVincentelli()
                 {
                     adj = H[cur][k];
                     if ((!U[adj]) &&
-                        (std::find(asn.begin(),asn.end(), adj) == asn.end()))
+                        (std::find(as.begin(),as.end(), adj) == as.end()))
                     {
                         asadd.push_back(adj);
                         if(++addsize >= addmin) break;
                     }
                 }
 
-#pragma omp critical
+//#pragma omp critical
                 if (asadd.size() < addmin)
                 {
                     in = cur;
                     inindx = j;
                     addmin = asadd.size();
                     asaddopt = asadd;
+
+                    if (addmin == 0) break;
                 }
+
             }
-            asn.erase(asn.begin()+inindx);
-            asn.insert(asn.end(),asaddopt.begin(),asaddopt.end());
+            as.erase(as.begin()+inindx);
+            as.insert(as.end(),asaddopt.begin(),asaddopt.end());
         }
 
         //Step 7-8
-        cn.push_back(asn.size());
+        cn = as.size();
 
         if (!I[in])
         {
             D.back().push_back(in);
             U[in] = true;
             --unusedcount;
+            ++domainsize;
         }
 
-        if (D.back().size() >= Nmin)
+        if (domainsize >= Nmin)
         {
-            if (cn.back() <= minconsize)
+            //Пока <= Nmax запоминаем наименьший контур
+            if (cn <= minconsize)
             {
-                minconsize = cn.back();
-                mincontour = asn;
-                dsize = D.back().size();
+                minconsize = cn;
+                mincontour = as;
+                dsize = domainsize;
             }
 
-            if (D.back().size() == Nmax)
+            if (domainsize == Nmax)
             {
+                //Переносим вершины контура в интерфейс
                 for (size_t j = 0; j < mincontour.size(); ++j)
                     moveNodeToInterface(mincontour[j]);
 
-                if (dsize == D.back().size())
-                {
-                    cn.back() = 0;
-                }
-                else
+                //И если были вершины после оптимального контура их переносим в граф обратно
+                if (dsize != domainsize)
                 {
                     std::vector<size_t> dadd;
                     dadd.assign(D.back().begin()+dsize, D.back().end());
                     D.back().resize(dsize);
 
-                    D.push_back( std::vector<size_t>() );
-
                     for (size_t j = 0; j < dadd.size(); ++j)
                     {
                         if (!I[dadd[j]])
-                            D.back().push_back(dadd[j]);
-
-                        std::vector<size_t>::iterator it = std::find(asn.begin(), asn.end(), dadd[j]);
-                        if (it != asn.end())
-                            asn.erase(it);
-                    }
-
-                    if (D.back().size() == 0)
-                    {
-                        D.pop_back();
-                        cn.back() = 0;
+                        {
+                            U[dadd[j]] = false;
+                            ++unusedcount;
+                        }
                     }
                 }
 
-                minconsize = ULONG_MAX;
-                mincontour.clear();
-                dsize = 0;
+                cn = 0;
             }
         }
     }

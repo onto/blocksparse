@@ -44,7 +44,7 @@ int main(int argc, char *argv[3])
         cout << "Время на разложение " << tdec << endl;
         t = omp_get_wtime();
 #else
-        tdec = double((clock()-t))/CLOCKS_PER_SEC
+        tdec = double((clock()-t))/CLOCKS_PER_SEC;
         cout << "Время на разложение " << tdec << endl;
         t = clock();
 #endif
@@ -72,7 +72,7 @@ int main(int argc, char *argv[3])
     }
     else if (type == 2)
     {
-        BlockSparseMatrix M1("matrix_b.txt", BlockSparseMatrix::BlockMatrixInputType);
+        BlockSparseMatrix M1("matrix_b.txt", BlockSparseMatrix::BlockMatrixIT);
         Vector B("vector.txt");
 
         size_t S = 0;
@@ -142,7 +142,7 @@ int main(int argc, char *argv[3])
         time_t tper, tdec, tsol, tres;
 #endif
 
-        BlockSparseMatrix M("matrix.txt", BlockSparseMatrix::SparseMatrixInputType);
+        BlockSparseMatrix M("matrix.txt", BlockSparseMatrix::SparseMatrixIT);
 
 #ifdef _OPENMP
         tper = omp_get_wtime() - t;
@@ -162,7 +162,7 @@ int main(int argc, char *argv[3])
         cout << "Время на разложение " << tdec << endl;
         t = omp_get_wtime();
 #else
-        tdec = double((clock()-t))/CLOCKS_PER_SEC
+        tdec = double((clock()-t))/CLOCKS_PER_SEC;
         cout << "Время на разложение " << tdec << endl;
         t = clock();
 #endif
@@ -248,7 +248,7 @@ int main(int argc, char *argv[3])
         time_t t1 = t;
 #endif
 
-        BlockSparseMatrix M("matrix.txt", BlockSparseMatrix::SparseMatrixUnsimmetricInputType);
+        BlockSparseMatrix M("matrix.txt", BlockSparseMatrix::UnsimmetricSparseMatrixIT);
 
 #ifdef _OPENMP
         cout << "Время на декомпозицию " << omp_get_wtime() - t << endl;

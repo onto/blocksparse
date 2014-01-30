@@ -23,7 +23,7 @@ for line in f:
 	for c in line.split():
 	    q += 1
 	    if q % 2 == 1 and c != '0':
-	        x,y = int(float(r-1)*hk), int(float(int(c)-1)*wk)
+	        y,x = int(float(r-1)*hk), int(float(int(c)-1)*wk)
 	        x = min(SIZE-1,x)
 	        y = min(SIZE-1,y)
 	        #print(r,int(c),x,y)

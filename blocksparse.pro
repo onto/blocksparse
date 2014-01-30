@@ -14,8 +14,7 @@ HEADERS += \
     matrixoperations.h \
     matrixcontainers.h \
     cudaoperations.h \
-    decompositor.h \
-    udecompositor.h
+    decompositor.h
 
 QMAKE_CXXFLAGS += -Wextra -fopenmp
 QMAKE_LFLAGS += -fopenmp
