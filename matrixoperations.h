@@ -42,6 +42,9 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
 
     size_t H = M.H;
 
+    size_t j;
+    double valabs;
+
     _M.U = M;
     _M.LF.assign(H+1, SPARSE_END);
     _M.P.resize(H+H+1);
@@ -52,24 +55,36 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
     // в неё переносить элементы из U
     std::vector<size_t> LE(H+1, SPARSE_END);
 
-    std::vector<size_t> Rfill(H+1), Cfill(H+1);
+    std::vector<size_t> Rfill(H+1,0), Cfill(H+1,0);
+
+    std::vector<size_t> &F = _M.U.F;
+    std::vector<size_t> &LF = _M.LF;
+    std::vector<size_t> &C = _M.U.C;
+    std::vector<size_t> &N = _M.U.N;
+    std::vector<double> &V = _M.U.V;
+
+    //Предрассчитаем количество элементов в строках и стообцах
+    for (size_t k = 1; k <= H; ++k)
+    {
+        for (size_t q = F[k]; q != SPARSE_END; q = N[q])
+        {
+            ++Rfill[k];
+            ++Cfill[C[q]];
+        }
+    }
+
+    std::vector<double> Norm(H+1);
 
     for (size_t k = 1; k <= H; ++k)
     {
-        memset(&Rfill[k],0,(H-k+1)*sizeof(size_t));
-        memset(&Cfill[k],0,(H-k+1)*sizeof(size_t));
-
-        double norm = 0;
+        //Норма активной подматрицы по столбцам
+        memset(&Norm[0],0,(H+1)*sizeof(double));
         for (size_t i = k; i <= H; ++i)
         {
-            for (size_t q = _M.U.F[i]; q != SPARSE_END; q = _M.U.N[q])
+            for (size_t q = F[i]; q != SPARSE_END; q = N[q])
             {
-                double t = fabs(_M.U.V[q]);
-                if (t > norm)
-                    norm = t;
-
-                ++Rfill[i];
-                ++Cfill[_M.U.C[q]];
+                if ((valabs = fabs(V[q])) > Norm[(j = C[q])])
+                    Norm[j] = valabs;
             }
         }
 
@@ -78,24 +93,24 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
 
         for (size_t i = k; i <= H; ++i)
         {
-            for (size_t q = _M.U.F[i]; q != SPARSE_END; q = _M.U.N[q])
+            for (size_t q = F[i]; q != SPARSE_END; q = N[q])
             {
-                double val = fabs(_M.U.V[q]);
-                if (val >= pivRel * norm)
+                if ((valabs = fabs(V[q])) >= pivRel * Norm[(j = C[q])])
                 {
-                    size_t j = _M.U.C[q];
                     size_t growth = (Rfill[i] - 1) * (Cfill[j] - 1);
 
                     if ((growth < optgrowth) ||
-                            ((growth == optgrowth) && (val > optv)))
+                            ((growth == optgrowth) && (valabs > optv)))
                     {
                         optgrowth = growth;
                         opti = i;
                         optj = j;
-                        optv = val;
+                        optv = valabs;
                     }
                 }
+                if (optgrowth == 0) break;
             }
+            if (optgrowth == 0) break;
         }
 
         // Перестановки строк и столбцов
@@ -105,67 +120,78 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
         {
             _M.U.swapRow(opti, k);
             t = _M.P[opti]; _M.P[opti] = _M.P[k]; _M.P[k] = t;
-            t = _M.LF[opti]; _M.LF[opti] = _M.LF[k]; _M.LF[k] = t;
+            t = LF[opti]; LF[opti] = LF[k]; LF[k] = t;
             t = LE[opti]; LE[opti] = LE[k]; LE[k] = t;
+            t = Rfill[opti]; Rfill[opti] = Rfill[k]; Rfill[k] = t;
         }
         if (optj != k)
         {
             _M.U.swapCol(optj, k);
             t = _M.P[H+optj]; _M.P[H+optj] = _M.P[H+k]; _M.P[H+k] = t;
+            t = Cfill[optj]; Cfill[optj] = Cfill[k]; Cfill[k] = t;
         }
 
         std::vector<size_t> kJ;
         std::vector<double> kV;
 
-        size_t q = _M.U.F[k];
-        double diag = _M.U.V[q];
+        size_t q = F[k];
+        double diag = V[q];
 
         // Преобразуем строку в U
         // и запомним столбцовые индексы и значения в строке
-        for (q = _M.U.N[q]; q != SPARSE_END; q = _M.U.N[q])
+        for (q = N[q]; q != SPARSE_END; q = N[q])
         {
-            kJ.push_back(_M.U.C[q]);
-            kV.push_back(_M.U.V[q]/diag);
+            size_t j = C[q];
+            kJ.push_back(j);
+            kV.push_back(V[q]/diag);
+
+            --Cfill[j]; //Уменьшаем, т.к. убираем элемент в ведущей строке.
         }
-        size_t N = kJ.size();
+        size_t Nz = kJ.size();
 
         for (size_t i = k+1; i <= H; ++i)
         {
-            size_t j = _M.U.C[_M.U.F[i]];
-            // Если в строке i нет диагонального, то идем к следующей.
+            j = C[F[i]];
+            // Если в строке i нет элемента в веущем столбце, то идем к следующей.
             if (j != k) continue;
 
+            --Rfill[i]; //Уменьшаем, т.к. убираем элемент в ведущем столбце.
+
             size_t j1, j2;
-            size_t p = _M.U.F[i];
-            size_t q = _M.U.N[p];
+            size_t p = F[i];
+            size_t q = N[p];
 
-            double bdiag = _M.U.V[p];
-            _M.U.V[p] /= diag;
+            double bdiag = V[p];
+            V[p] /= diag;
 
-            for (size_t l = 0; l < N; ++l)
+            for (size_t l = 0; l < Nz; ++l)
             {
                 j1 = kJ[l];
                 while (q != SPARSE_END)
                 {
-                    j2 = _M.U.C[q];
-                    if (j2 < j1) { p = q; q = _M.U.N[q]; continue; }
+                    j2 = C[q];
+                    if (j2 < j1) { p = q; q = N[q]; continue; }
 
                     if (j2 == j1)
                     {
-                        _M.U.V[q] -= kV[l]*bdiag;
+                        V[q] -= kV[l]*bdiag;
                     }
                     else
                     {
                         // Тут уже нужно добавить элемент
-                        _M.U.C.push_back(j1);
-                        size_t p1 = _M.U.C.size()-1;
-                        _M.U.N[p] = p1; // предыдущему ссылку на этот
-                        _M.U.N.push_back(q);  // этому ссылку на следующий
-                        _M.U.V.push_back(-kV[l]*bdiag);
+                        C.push_back(j1);
+                        size_t p1 = C.size()-1;
+                        N[p] = p1; // предыдущему ссылку на этот
+                        N.push_back(q);  // этому ссылку на следующий
+                        V.push_back(-kV[l]*bdiag);
                         p = q; q = p1;
                         // больше вроде ничего делать не нужно,
                         // здесь могут попасться только "вторые" элементы в
                         // строке и F менять не нужно.
+
+                        //Увеличим счетчики элементов
+                        ++Rfill[i];
+                        ++Cfill[j1];
                     }
                     break;
                 }
@@ -173,22 +199,26 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
                 if (q == SPARSE_END)
                 {
                     // Добавим элементы в конец
-                    _M.U.C.push_back(j1);
-                    size_t p1 = _M.U.C.size()-1;
-                    _M.U.N[p] = p1; // предыдущему ссылку на этот
-                    _M.U.N.push_back(q);  // этому ссылку на следующий
-                    _M.U.V.push_back(-kV[l]*bdiag);
+                    C.push_back(j1);
+                    size_t p1 = C.size()-1;
+                    N[p] = p1; // предыдущему ссылку на этот
+                    N.push_back(q);  // этому ссылку на следующий
+                    V.push_back(-kV[l]*bdiag);
                     p = q; q = p1;
+
+                    //Увеличим счетчики элементов
+                    ++Rfill[i];
+                    ++Cfill[j1];
                 }
             }
             // и вот тут элемент в ведущем столбце отходит матрице L
-            if (_M.LF[i] == SPARSE_END)
-                _M.LF[i] = _M.U.F[i];
+            if (LF[i] == SPARSE_END)
+                LF[i] = F[i];
             else
-                _M.U.N[LE[i]] = _M.U.F[i];
-            LE[i] = _M.U.F[i];
-            _M.U.F[i] = _M.U.N[_M.U.F[i]];
-            _M.U.N[LE[i]] = SPARSE_END;
+                N[LE[i]] = F[i];
+            LE[i] = F[i];
+            F[i] = N[F[i]];
+            N[LE[i]] = SPARSE_END;
         }
     }
 

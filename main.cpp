@@ -36,8 +36,12 @@ int main(int argc, char *argv[3])
         time_t tdec, tsol, tres;
 #endif
 
+        cout << "Было ненулеых " << M.C.size()-1 << endl;
+
         LUPS T;
         MatrixOperations::LUTriang(M, T);
+
+        cout << "Стало ненулеых " << T.U.C.size()-1 << endl;
 
 #ifdef _OPENMP
         tdec = omp_get_wtime() - t;
