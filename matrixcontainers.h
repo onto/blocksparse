@@ -5,6 +5,7 @@
 
 #include "matrix.h"
 #include "sparsematrix.h"
+#include "decompositor.h"
 
 struct LUPS
 {
@@ -33,6 +34,28 @@ struct LUPS
     {
         U.print();
     }
+
+    void save2fileL(const char *file)
+    {
+        std::ofstream out(file);
+
+        out << U.H << " " << U.W << '\n';
+
+        for (size_t i = 1; i <= U.H; ++i)
+        {
+            for (size_t q = LF[i]; q != SPARSE_END; q = U.N[q])
+            {
+                out << U.C[q] << " " << U.V[q] << '\t';
+            }
+            out << "0\n";
+        }
+        out.close();
+    }
+
+    void save2fileU(const char *file)
+    {
+        U.save2file(file);
+    }
 };
 
 struct LUPM
@@ -41,38 +64,40 @@ struct LUPM
     std::vector<size_t> P;
     std::vector<size_t> Pt;
 
-    void printL() const
-    {
-        for (size_t i = 1; i <= M.H; ++i)
-        {
-            for (size_t j = 1; j < i; ++j)
-                std::cout << M.get(i,j) << '\t';
-            for (size_t j = i; j <= M.H; ++j)
-                std::cout << "*\t";
-            std::cout << '\n';
-        }
-    }
+//    void printL() const
+//    {
+//        for (size_t i = 1; i <= M.H; ++i)
+//        {
+//            for (size_t j = 1; j < i; ++j)
+//                std::cout << M(i,j) << '\t';
+//            for (size_t j = i; j <= M.H; ++j)
+//                std::cout << "*\t";
+//            std::cout << '\n';
+//        }
+//    }
 
-    void printU() const
-    {
-        for (size_t i = 1; i <= M.H; ++i)
-        {
-            for (size_t j = 1; j < i; ++j)
-                std::cout << "*\t";
-            for (size_t j = i; j <= M.H; ++j)
-                std::cout << M.get(i,j) << '\t';
-            std::cout << '\n';
-        }
-    }
+//    void printU() const
+//    {
+//        for (size_t i = 1; i <= M.H; ++i)
+//        {
+//            for (size_t j = 1; j < i; ++j)
+//                std::cout << "*\t";
+//            for (size_t j = i; j <= M.H; ++j)
+//                std::cout << M(i,j) << '\t';
+//            std::cout << '\n';
+//        }
+//    }
 };
 
-struct FactorizedBlockSparseMatrix
+struct FactorizedBBDSparseMatrix
 {
     std::vector< LUPS > Alu;
     std::vector< Matrix > Bh;
     std::vector< SparseMatrix > C;
     LUPM H;
-    std::vector<size_t> R;
+    BBDStruct BBDS;
+
+    size_t N, Nb;
 };
 
 #endif // LUCONTAINER_H

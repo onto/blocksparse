@@ -28,9 +28,12 @@ public:
     static bool Inverse(SparseMatrix &M, Matrix &_M);
     static bool Inverse(Matrix &M, Matrix &_M);
 
-    static bool BlockMatrixFactorization(BlockSparseMatrix &M,
-                                         FactorizedBlockSparseMatrix &_M);
-    static bool Solve(FactorizedBlockSparseMatrix &M, Vector &B, Vector &X);
+    static bool BlockMatrixFactorization(BBDSparseMatrix &M,
+                                         FactorizedBBDSparseMatrix &_M);
+    static bool Solve(FactorizedBBDSparseMatrix &M, Vector &B, Vector &X);
+
+    static double MaxResidual(SparseMatrix &M, Vector &B, Vector &X);
+    static double MaxResidual(Matrix &M, Vector &B, Vector &X);
 };
 
 bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
@@ -77,7 +80,7 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
 
     for (size_t k = 1; k <= H; ++k)
     {
-        //Норма активной подматрицы по столбцам
+        //Норма активной подматрицы
         memset(&Norm[0],0,(H+1)*sizeof(double));
         for (size_t i = k; i <= H; ++i)
         {
@@ -95,7 +98,8 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
         {
             for (size_t q = F[i]; q != SPARSE_END; q = N[q])
             {
-                if ((valabs = fabs(V[q])) >= pivRel * Norm[(j = C[q])])
+                j = C[q];
+                if ((valabs = fabs(V[q])) >= pivRel * Norm[j])
                 {
                     size_t growth = (Rfill[i] - 1) * (Cfill[j] - 1);
 
@@ -106,9 +110,9 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
                         opti = i;
                         optj = j;
                         optv = valabs;
+                        if (optgrowth == 0) break;
                     }
-                }
-                if (optgrowth == 0) break;
+                }                
             }
             if (optgrowth == 0) break;
         }
@@ -135,7 +139,7 @@ bool MatrixOperations::LUTriang(SparseMatrix &M, LUPS &_M, double pivRel)
         std::vector<double> kV;
 
         size_t q = F[k];
-        double diag = V[q];
+        double diag = V[q]; if (diag == 0.0) V[q] = diag = 1e-20;
 
         // Преобразуем строку в U
         // и запомним столбцовые индексы и значения в строке
@@ -484,112 +488,162 @@ bool MatrixOperations::Inverse(Matrix &M, Matrix &_M)
         if (!Solve(LU, B, X)) return false;
 
         for (size_t j = 1; j <= H; ++j)
-            _M.set(j, i, X.V[j]);
+            _M(j,i) = X.V[j];
     }
     return true;
 }
 
-bool MatrixOperations::BlockMatrixFactorization(BlockSparseMatrix &M,
-                                                FactorizedBlockSparseMatrix &_M)
+bool MatrixOperations::BlockMatrixFactorization(BBDSparseMatrix &M,
+                                                FactorizedBBDSparseMatrix &_M)
 {
-    _M.C = M.C;
-    _M.R = M.R;
+    size_t Nb = M.Nb; //Количество диагональных блоков
 
-    size_t N = _M.R.size()-1;
+    _M.Nb = M.Nb;
+    _M.N = M.N;
+    _M.C = M.C;
+    _M.BBDS = M.BBDS;
+
+#ifdef TIME_LOG
+#ifdef _OPENMP
+    double t = omp_get_wtime(), t1;
+#endif
+#endif
 
     //Раскладываем A_i
-    _M.Alu.resize(N);
+    _M.Alu.resize(Nb);
 #pragma omp parallel for
-    for (size_t i = 0; i < N; ++i)
+    for (size_t i = 0; i < Nb; ++i)
     {
         LUTriang(M.A[i], _M.Alu[i]);
     }
 
+#ifdef TIME_LOG
+#ifdef _OPENMP
+    t1 = omp_get_wtime() - t;
+    std::cout << "Разложение A_i-x " << t1 << std::endl;
+    t = omp_get_wtime();
+#endif
+#endif
+
     //Рассчитываем inv(A_i)*B_i = Bh_i
-    for (size_t i = 0; i < N; ++i)
+    for (size_t i = 0; i < Nb; ++i)
         _M.Bh.push_back(Matrix(M.B[i]));
 
 #pragma omp parallel for
-    for (size_t i = 0; i < N; ++i)
+    for (size_t i = 0; i < Nb; ++i)
     {
         size_t H = _M.Bh[i].H;
         Vector b(H), x(H);
-        for (size_t j = 1; j <= _M.Bh[i].W; ++j)
+        for (size_t j = 1; j <= M.BBDS.Is[i]; ++j)
         {
             for (size_t k = 1; k <= H; ++k)
-                b.V[k] = _M.Bh[i].get(k,j);
+                b[k] = _M.Bh[i](k,j);
 
             Solve(_M.Alu[i], b, x);
 
             for (size_t k = 1; k <= H; ++k)
-                _M.Bh[i].set(k, j, x.V[k]);
+                _M.Bh[i](k, j) = x[k];
         }
     }
 
+#ifdef TIME_LOG
+#ifdef _OPENMP
+    t1 = omp_get_wtime() - t;
+    std::cout << "Нахождение Bh_i " << t1 << std::endl;
+    t = omp_get_wtime();
+#endif
+#endif
+
     // Рассчитаем матрицу H
-    Matrix H(M.Q);
-    for (size_t i = 0; i < N; ++i)
+    Matrix H(M.D);
+    for (size_t i = 0; i < Nb; ++i)
     {
         H -= _M.C[i]*_M.Bh[i];
     }
 
+#ifdef TIME_LOG
+#ifdef _OPENMP
+    t1 = omp_get_wtime() - t;
+    std::cout << "Расчет H " << t1 << std::endl;
+    t = omp_get_wtime();
+#endif
+#endif
+
     // И раскладываем H
     if (!LUTriang(H, _M.H)) return false;
+
+#ifdef TIME_LOG
+#ifdef _OPENMP
+    t1 = omp_get_wtime() - t;
+    std::cout << "Разложение H " << t1 << std::endl;
+#endif
+#endif
 
     return true;
 }
 
-bool MatrixOperations::Solve(FactorizedBlockSparseMatrix &M, Vector &B,
+bool MatrixOperations::Solve(FactorizedBBDSparseMatrix &M, Vector &B,
                              Vector &X)
 {
-    size_t N = M.R.size()-1;
+    size_t Nb = M.Nb, N = M.N;
 
-    size_t q = 1;
-    std::vector<size_t> qI(N+2);
-    for (size_t i = 0; i <= N; ++i)
-    {
-        qI[i] = q;
-        q += M.R[i];
-    }
-    qI[N+1] = q;
-
-    std::vector< Vector >bh(N);
+    std::vector< Vector >bh(Nb);
 #pragma omp parallel for
-    for (size_t i = 0; i < N; ++i)
+    for (size_t ib = 0; ib < Nb; ++ib)
     {
-        Vector b;
-        b.H = M.R[i];
-        b.V.push_back(0);
-        b.V.insert(b.V.end(), B.V.begin()+qI[i], B.V.begin()+qI[i+1]);
+        size_t b0 = M.BBDS.R[ib], bdim = M.BBDS.R[ib+1]-b0;
+        Vector b(bdim);
+        for (size_t i = 1; i <= bdim; ++i)
+            b[i] = B[M.BBDS.Pr[b0+i]];//С учетом перестановки
 
-        Solve(M.Alu[i], b, bh[i]);
+        Solve(M.Alu[ib], b, bh[ib]);
     }
 
-    Vector v;
-    v.H = M.R.back();
-    v.V.push_back(0);
-    v.V.insert(v.V.end(), B.V.begin()+qI[N], B.V.begin()+qI[N+1]);
+    Vector g(M.H.M.H); size_t b0 = M.BBDS.R[Nb];
+    for (size_t i = 1; i <= M.H.M.H; ++i)
+        g[i] = B[M.BBDS.Pr[b0+i]];
 
-    for (size_t i = 0; i < N; ++i)
+    for (size_t i = 0; i < Nb; ++i)
     {
-        v -= M.C[i]*bh[i];
+        g -= M.C[i]*bh[i];
     }
 
     Vector X_q;
-    if (!Solve(M.H, v, X_q)) return false;
+    if (!Solve(M.H, g, X_q)) return false;
 
-    X.resize(B.H);
+    X.resize(N);
+    Vector Xt(N);
 
 //#pragma omp parallel for
-    for (size_t i = 0; i < N; ++i)
+    for (size_t ib = 0; ib < Nb; ++ib)
     {
-        Vector X_i = bh[i]-M.Bh[i]*X_q;
-        memcpy(&(X.V[qI[i]]),&(X_i.V[1]),M.R[i]*sizeof(double));
+        size_t bb = M.BBDS.R[ib]+1, bdim = M.BBDS.R[ib+1]-bb+1;
+
+        Vector X_i = bh[ib]-M.Bh[ib]*X_q;
+
+        memcpy(&(Xt.V[bb]),&(X_i.V[1]),bdim*sizeof(double));
     }
 
-    memcpy(&(X.V[qI[N]]),&(X_q.V[1]),M.R.back()*sizeof(double));
+    memcpy(&(Xt.V[M.BBDS.R[Nb]+1]),&(X_q.V[1]),M.H.M.H*sizeof(double));
+
+    for (size_t i = 1; i <= N; ++i)
+        X[i] = Xt[M.BBDS.Pct[i]];
 
     return true;
+}
+
+double MatrixOperations::MaxResidual(SparseMatrix &M, Vector &B, Vector &X)
+{
+    Vector R = B-M*X;
+
+    return R.normInf();
+}
+
+double MatrixOperations::MaxResidual(Matrix &M, Vector &B, Vector &X)
+{
+    Vector R = B-M*X;
+
+    return R.normInf();
 }
 
 #endif // MATRIXOPERATIONS_H

@@ -1,5 +1,14 @@
 #include <iostream>
 
+#ifndef TIME_LOG
+#define TIME_LOG
+
+#ifndef CSV_LOG
+//#define CSV_LOG
+#endif
+
+#endif
+
 #include "sparsematrix.h"
 #include "matrixoperations.h"
 #include "decompositor.h"
@@ -19,12 +28,16 @@ int main(int argc, char *argv[3])
     int type = atoi(argv[1]);
     int threads = atoi(argv[2]);
 
-    ofstream out("res.csv",ios_base::app);
 
-    if (type == 1)
+#ifdef CSV_LOG
+    ofstream out("res.csv",ios_base::app);
+#endif
+
+    if (type == 1) //Решение с разреженной матрицей
     {
         SparseMatrix M("matrix.txt");
 
+#ifdef TIME_LOG
 #ifdef _OPENMP
         omp_set_num_threads(threads);
         double t = omp_get_wtime();
@@ -35,14 +48,19 @@ int main(int argc, char *argv[3])
         time_t t1 = t;
         time_t tdec, tsol, tres;
 #endif
+#endif
 
-        cout << "Было ненулеых " << M.C.size()-1 << endl;
+        cout << "Было ненулевых " << M.C.size()-1 << endl;
 
         LUPS T;
         MatrixOperations::LUTriang(M, T);
 
-        cout << "Стало ненулеых " << T.U.C.size()-1 << endl;
+        T.save2fileL("spL.txt");
+        T.save2fileU("spU.txt");
 
+        cout << "Стало ненулевых " << T.U.C.size()-1 << endl;
+
+#ifdef TIME_LOG
 #ifdef _OPENMP
         tdec = omp_get_wtime() - t;
         cout << "Время на разложение " << tdec << endl;
@@ -52,11 +70,12 @@ int main(int argc, char *argv[3])
         cout << "Время на разложение " << tdec << endl;
         t = clock();
 #endif
+#endif
 
-        Vector B("vector.txt");
-        Vector X;
+        Vector B("vector.txt"), X;
         MatrixOperations::Solve(T, B, X);
 
+#ifdef TIME_LOG
 #ifdef _OPENMP
         tsol = omp_get_wtime() - t;
         tres = omp_get_wtime() - t1;
@@ -69,72 +88,25 @@ int main(int argc, char *argv[3])
         cout << "Общее время " << tres << endl;
 #endif
 
-        //out << tdec << "; " << tsol << "; " << tres << "; ";
+#ifdef CSV_LOG
+        out << tdec << "; " << tsol << "; " << tres << "; ";
+#endif
+#endif
+
+        //X.save2file("solution.txt");
+
+        cout << "Ошибка: " << MatrixOperations::MaxResidual(M, B, X) << endl;
 
         cout << X.V[1] << endl;
         cout << X.V[2] << endl;
     }
-    else if (type == 2)
-    {
-        BlockSparseMatrix M1("matrix_b.txt", BlockSparseMatrix::BlockMatrixIT);
-        Vector B("vector.txt");
-
-        size_t S = 0;
-        for (size_t i = 0; i < M1.A.size(); ++i)
-        {
-            S += M1.A[i].V.size()-1;
-            S += M1.B[i].V.size()-1;
-            S += M1.C[i].V.size()-1;
-        }
-        S += M1.Q.V.size()-1;
-
-        //cout << S << endl;
-
-#ifdef _OPENMP
-        omp_set_num_threads(threads);
-        double t = omp_get_wtime();
-        double t1 = t;
-        ofstream out;
-        if (threads > 1)
-            out.open("ot.txt",ios_base::app);
-        else
-            out.open("bt.txt",ios_base::app);
-#else
-        time_t t = clock();
-        time_t t1 = t;
-        ofstream out("bt.txt",ios_base::app);
-#endif
-
-        FactorizedBlockSparseMatrix FM;
-        MatrixOperations::BlockMatrixFactorization(M1, FM);
-
-#ifdef _OPENMP
-        //cout << "Время на разложение " << omp_get_wtime() - t << endl;
-        t = omp_get_wtime();
-#else
-        //cout << "Время на разложение " << double((clock()-t))/CLOCKS_PER_SEC << endl;
-        t = clock();
-#endif
-
-        Vector X;
-        MatrixOperations::Solve(FM, B, X);
-
-#ifdef _OPENMP
-        //cout << "Время на решение " << omp_get_wtime() - t << endl;
-       // cout << "Общее время " << omp_get_wtime() - t1 << endl;
-        out << omp_get_wtime() - t1 << endl;
-#else
-        //cout << "Время на решение " << double((clock()-t))/CLOCKS_PER_SEC << endl;
-        //cout << "Общее время " << double((clock()-t1))/CLOCKS_PER_SEC << endl;
-        out << double((clock()-t1))/CLOCKS_PER_SEC << endl;
-#endif
-
-        cout << X.V[1] << endl;
-        cout << X.V[2] << endl;
-    }
-    else if (type == 3)
+    else if (type == 2) //Решение приведением к БДО форме
     {
 
+        SparseMatrix M("matrix.txt");
+        Vector B("vector.txt"), X;
+
+#ifdef TIME_LOG
 #ifdef _OPENMP
         omp_set_num_threads(threads);
         double t = omp_get_wtime();
@@ -145,9 +117,11 @@ int main(int argc, char *argv[3])
         time_t t1 = t;
         time_t tper, tdec, tsol, tres;
 #endif
+#endif
 
-        BlockSparseMatrix M("matrix.txt", BlockSparseMatrix::SparseMatrixIT);
+        BBDSparseMatrix A(M);
 
+#ifdef TIME_LOG
 #ifdef _OPENMP
         tper = omp_get_wtime() - t;
         cout << "Время на декомпозицию " << tper << endl;
@@ -157,10 +131,12 @@ int main(int argc, char *argv[3])
         cout << "Время на декомпозицию " << tper << endl;
         t = clock();
 #endif
+#endif
 
-        FactorizedBlockSparseMatrix FM;
-        MatrixOperations::BlockMatrixFactorization(M, FM);
+        FactorizedBBDSparseMatrix FM;
+        MatrixOperations::BlockMatrixFactorization(A, FM);
 
+#ifdef TIME_LOG
 #ifdef _OPENMP
         tdec = omp_get_wtime() - t;
         cout << "Время на разложение " << tdec << endl;
@@ -170,16 +146,11 @@ int main(int argc, char *argv[3])
         cout << "Время на разложение " << tdec << endl;
         t = clock();
 #endif
-
-        Vector B("vector.txt");
-        B.permute(M.D.Pr);
-
-        Vector X;
+#endif
 
         MatrixOperations::Solve(FM, B, X);
 
-        X.permute(M.D.Pct);
-
+#ifdef TIME_LOG
 #ifdef _OPENMP
         tsol = omp_get_wtime() - t;
         tres = omp_get_wtime() - t1;
@@ -192,18 +163,25 @@ int main(int argc, char *argv[3])
         cout << "Общее время " << tres << endl;
 #endif
 
-        //out << tper << "; " << tdec << "; " << tsol << "; " << tres << "; ";
+#ifdef CSV_LOG
+        out << tper << "; " << tdec << "; " << tsol << "; " << tres << "; ";
+#endif
+#endif
 
-        //X.print();
+        //X.save2file("solution.txt");
+
+        cout << "Ошибка: " << MatrixOperations::MaxResidual(M, B, X) << endl;
+
         cout << X.V[1] << endl;
         cout << X.V[2] << endl;
 
     }
-    else if (type == 4)
+    else if (type == 3) //Решение с плотной матрицей
     {
 
         Matrix M("matrix.txt");
 
+#ifdef TIME_LOG
 #ifdef _OPENMP
         omp_set_num_threads(threads);
         double t = omp_get_wtime();
@@ -211,11 +189,13 @@ int main(int argc, char *argv[3])
 #else
         time_t t = clock();
         time_t t1 = t;
+#endif
 #endif
 
         LUPM T;
         MatrixOperations::LUTriang(M, T);
 
+#ifdef TIME_LOG
 #ifdef _OPENMP
         cout << "Время на разложение " << omp_get_wtime() - t << endl;
         t = omp_get_wtime();
@@ -223,11 +203,12 @@ int main(int argc, char *argv[3])
         cout << "Время на разложение " << double((clock()-t))/CLOCKS_PER_SEC << endl;
         t = clock();
 #endif
+#endif
 
-        Vector B("vector.txt");
-        Vector X;
+        Vector B("vector.txt"), X;
         MatrixOperations::Solve(T, B, X);
 
+#ifdef TIME_LOG
 #ifdef _OPENMP
         cout << "Время на решение " << omp_get_wtime() - t << endl;
         cout << "Общее время " << omp_get_wtime() - t1 << endl;
@@ -235,73 +216,13 @@ int main(int argc, char *argv[3])
         cout << "Время на решение " << double((clock()-t))/CLOCKS_PER_SEC << endl;
         cout << "Общее время " << double((clock()-t1))/CLOCKS_PER_SEC << endl;
 #endif
+#endif
 
-//        X.print();
+        cout << "Ошибка: " << MatrixOperations::MaxResidual(M, B, X) << endl;
+
         cout << X.V[1] << endl;
         cout << X.V[2] << endl;
     }
-    else if (type == 5)
-    {
-
-#ifdef _OPENMP
-        omp_set_num_threads(threads);
-        double t = omp_get_wtime();
-        double t1 = t;
-#else
-        time_t t = clock();
-        time_t t1 = t;
-#endif
-
-        BlockSparseMatrix M("matrix.txt", BlockSparseMatrix::UnsimmetricSparseMatrixIT);
-
-#ifdef _OPENMP
-        cout << "Время на декомпозицию " << omp_get_wtime() - t << endl;
-        t = omp_get_wtime();
-#else
-        cout << "Время на декомпозицию " << double((clock()-t))/CLOCKS_PER_SEC << endl;
-        t = clock();
-#endif
-
-        FactorizedBlockSparseMatrix FM;
-        MatrixOperations::BlockMatrixFactorization(M, FM);
-
-#ifdef _OPENMP
-        cout << "Время на разложение " << omp_get_wtime() - t << endl;
-        t = omp_get_wtime();
-#else
-        cout << "Время на разложение " << double((clock()-t))/CLOCKS_PER_SEC << endl;
-        t = clock();
-#endif
-
-        Vector B("vector.txt");
-        B.permute(M.D.Pr);
-
-        Vector X;
-
-        MatrixOperations::Solve(FM, B, X);
-
-        X.permute(M.D.Pct);
-
-#ifdef _OPENMP
-        cout << "Время на решение " << omp_get_wtime() - t << endl;
-        cout << "Общее время " << omp_get_wtime() - t1 << endl;
-        //out << omp_get_wtime() - t1 << endl;
-#else
-        cout << "Время на решение " << double((clock()-t))/CLOCKS_PER_SEC << endl;
-        cout << "Общее время " << double((clock()-t1))/CLOCKS_PER_SEC << endl;
-        //out << double((clock()-t1))/CLOCKS_PER_SEC << endl;
-#endif
-
-        //X.print();
-        cout << X.V[1] << endl;
-        cout << X.V[2] << endl;
-
-    }
-
-//    SparseMatrix M("A0.txt");
-//    Matrix Minv;
-//    MatrixOperations::Inverse(M, Minv);
-//    Minv.print();
 
     return 0;
 }

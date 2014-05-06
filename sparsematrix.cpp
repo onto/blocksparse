@@ -237,6 +237,23 @@ void SparseMatrix::print() const
     }
 }
 
+void SparseMatrix::printStructure() const
+{
+    std::cout << std::endl;
+    for (size_t i = 1; i <= H; ++i)
+    {
+        size_t j = 1, jj;
+        for (size_t q = F[i]; q != SPARSE_END; q = N[q])
+        {
+            jj = C[q];
+            while (j < jj) { std::cout << "_ "; ++j; }
+            std::cout << "* "; ++j;
+        }
+        while (j <= W) { std::cout << "_ "; ++j; }
+        std::cout << std::endl;
+    }
+}
+
 void SparseMatrix::save2file(const char *file) const
 {
     std::ofstream out(file);
@@ -247,7 +264,7 @@ void SparseMatrix::save2file(const char *file) const
     {
         for (size_t q = F[i]; q != SPARSE_END; q = N[q])
         {
-            out << C[q] << " " << V[q] << '\t';
+            out << C[q] << " " << std::setprecision(std::ios::floatfield) << V[q] << '\t';
         }
         out << "0\n";
     }
@@ -269,5 +286,20 @@ void SparseMatrix::save2fileold(const char *file) const
         out << "0\n";
     }
     out.close();
+}
+
+void SparseMatrix::save2fileTransposed(const char *file) const
+{
+    SparseMatrix St(W,H);
+
+    for (size_t i = 1; i <= H; ++i)
+    {
+        for (size_t q = F[i]; q != SPARSE_END; q = N[q])
+        {
+            St.set(C[q], i, V[q]);//out << C[q] << " " << V[q] << '\t';
+        }
+    }
+
+    St.save2file(file);
 }
 

@@ -12,332 +12,669 @@
 #include "sparsematrix.h"
 #include "blockmatrix.h"
 
-class MatrixDecompositor
+enum DecompositionMethod
 {
-public:
-    MatrixDecompositor(const char *file, bool sim);
-    MatrixDecompositor() {}
-    ~MatrixDecompositor() {}
-
-    std::vector<size_t> Pr, Pct, R;
-
-private:
-    std::vector< std::vector<size_t> > H;
-    size_t N, unusedcount;
-    std::vector< std::vector<size_t> > D;
-    std::vector<bool> U, I, HD;
-
-
-    void moveNodeToInterface(size_t index);
-    void decomposeSangiovanniVincentelli();
-    void printH();
+    SV = 0,
+    SVI
 };
 
-MatrixDecompositor::MatrixDecompositor(const char *file, bool sim)
+struct BBDStruct
 {
-    std::ifstream in(file);
+    VectSizet Pr, Pc, Prt, Pct; //Перестановки
+    VectSizet R;  //Размеры блоков
+    VectSizet Is; //Массив количества элементов в каждом разделителе
 
-    in >> N >> N;
-
-    H.assign(N, std::vector<size_t>());
-    HD.assign(N, false);
-
-    double x;
-    size_t c;
-
-    //Сначала считаем только связи
-
-    if (sim) //Для симметричной матрицы
+    void swap(VectSizet _Pr, VectSizet _Pc, VectSizet _Prt, VectSizet _Pct,
+              VectSizet _R, VectSizet _Is)
     {
-        for (size_t r = 1, i = 0; r <= N; ++r, ++i)
-        {
-            while (true)
-            {
-                in >> c;
+        Pr.swap(_Pr);
+        Pc.swap(_Pc);
+        Prt.swap(_Prt);
+        Pct.swap(_Pct);
+        R.swap(_R);
+        Is.swap(_Is);
+    }
+};
 
-                if (c != SPARSE_END){
-                    in >> x;
-                    if (r != c) H[i].push_back(c-1);
-                    else HD[i] = true;
-                } else {
-                    break;
-                }
+class MatrixBBDPreordering
+{
+public:
+    static void BBDDecompose(SparseMatrix &A, BBDStruct &BBDS, DecompositionMethod method, size_t Nmin, size_t Nmax, size_t Dmax);
+
+private:
+    static void MaximumTransversal(SparseMatrix &A, VectSizet &Pr);
+
+    static void SangiovannyVincentelli(VectVectSizet &H, VectVectSizet &D, VectSizet &Is, size_t Nmin, size_t Nmax);
+    static void SangiovannyVincentelliImproved(VectVectSizet &H, VectVectSizet &D, VectSizet &Is, size_t Nmin, size_t Nmax, size_t Dmax);
+};
+
+void MatrixBBDPreordering::BBDDecompose(SparseMatrix &A, BBDStruct &BBDS, DecompositionMethod method, size_t Nmin, size_t Nmax, size_t Dmax)
+{
+    size_t N = A.H, N1 = N+1;
+
+#ifdef TIME_LOG
+#ifdef _OPENMP
+    double t = omp_get_wtime(), t1;
+#endif
+#endif
+
+    //Для начала избавимся от нулей на диагонали,
+    //чтобы диагональные блоки не получались вырожденными
+    VectSizet PrMT, PrtMT(N1);
+    MaximumTransversal(A, PrMT);
+
+#ifdef TIME_LOG
+#ifdef _OPENMP
+    t1 = omp_get_wtime() - t;
+    std::cout << "MaximumTransversal " << t1 << std::endl;
+    t = omp_get_wtime();
+#endif
+#endif
+
+
+    for (size_t i = 1; i <= N; ++i) PrtMT[PrMT[i]] = i;
+
+    VectVectSizet H(N1); //Массив хранения структуры матрицы A+A^T
+
+    //Заполняем структуру матрицы A+A^T, применяя к ней перестановку полученную
+    //в методе MaximumTransversal
+    size_t j;
+    for (size_t i = 1; i <= N; ++i)
+    {
+        size_t ii = PrtMT[i];
+        for (size_t q = A.F[i]; q != SPARSE_END; q = A.N[q])
+        {
+            j = A.C[q];
+            if (ii != j)
+            {
+                H[ii].push_back(j);
+                H[j].push_back(ii);
             }
         }
     }
-    else //Для несимметричной матрицы
+
+    //Убираем повторяющиеся
+    for (size_t i = 1; i <= N; ++i)
     {
-        for (size_t r = 1; r <= N; ++r)
-        {
-            while (true)
-            {
-                in >> c;
-
-                if (c != SPARSE_END){
-                    in >> x;
-                    if (r != c)
-                    {
-                        H[r-1].push_back(c-1);
-                        H[c-1].push_back(r-1);
-                    }
-                    else
-                    {
-                        HD[r-1] = true;
-                    }
-                } else {
-                    break;
-                }
-            }
-        }
-
-        for (size_t i = 0; i < N; ++i)
-        {
-            std::sort(H[i].begin(), H[i].end());
-            H[i].resize(std::distance(H[i].begin(), std::unique(H[i].begin(), H[i].end())));
-        }
+        std::sort(H[i].begin(), H[i].end());
+        H[i].resize(std::distance(H[i].begin(), std::unique(H[i].begin(), H[i].end())));
     }
 
-    in.close();
+    VectVectSizet D;
+    VectSizet Is;
 
-    decomposeSangiovanniVincentelli();
+    //Рассчитываем перестановку
+    switch (method) {
+    default:
+    case SVI:
+        SangiovannyVincentelliImproved(H, D, Is, Nmin, Nmax, Dmax);
+        break;
+    case SV:
+        SangiovannyVincentelli(H, D, Is, Nmin, Nmax);
+        break;
+    }
 
-    //Заполним структуру результата
-    Pct.push_back(0);
-    for (size_t i = 1; i < D.size(); ++i)
+    VectSizet Pr, Pc, Prt, Pct;
+    VectSizet R;
+
+    //Заполняем массив перестановки столбцов и массив размеров блоков
+    Pc.push_back(0);
+    R.push_back(0);
+    for (size_t i = 1, i_end = D.size(); i < i_end; ++i)
     {
-        if (D[i].size() == 0) continue;
-        Pct.insert(Pct.end(), D[i].begin(), D[i].end());
-        R.push_back(D[i].size());
+        Pc.insert(Pc.end(), D[i].begin(), D[i].end());
+        R.push_back(R.back()+D[i].size());
     }
 
     if (D[0].size() != 0)
     {
-        Pct.insert(Pct.end(), D[0].begin(), D[0].end());
-        R.push_back(D[0].size());
+        Pc.insert(Pc.end(), D[0].begin(), D[0].end());
+        R.push_back(R.back()+D[0].size());
     }
 
+    //Рассчитываем перестановку строк используя перестановку из
+    //метода MaximumTransversal и метода приведения к блочному виду
     Pr.resize(N+1);
+    for (size_t i = 1; i <= N; ++i) Pr[i] = PrMT[Pc[i]];
+
+    //Рассчитываем транспонированную перестановку
+    Prt.resize(N+1); Pct.resize(N+1);
+    for (size_t i = 1; i <= N; ++i) Prt[Pr[i]] = Pct[Pc[i]] = i;
+
+    //Заполняем структуру результата
+    BBDS.swap(Pr, Pc, Prt, Pct, R, Is);
+
+#ifdef TIME_LOG
+#ifdef _OPENMP
+    t1 = omp_get_wtime() - t;
+    std::cout << "Рассчет перестановки " << t1 << std::endl;
+    t = omp_get_wtime();
+#endif
+#endif
+}
+
+
+void MatrixBBDPreordering::MaximumTransversal(SparseMatrix &A, VectSizet &Pr)
+{
+    size_t N = A.H, N1 = N+1;
+
+    Pr.resize(N1, 0);
+    //for (size_t i = 1; i <= N; ++i) Pr[i] = i;
+    //return;
+
+    std::vector< std::vector<size_t> > H(N1);
+    std::vector<size_t> visited(N1, 1), row_match(N1, 0), lookahead(N1, 0),
+            colptrs(N1, 0), stack(N1, 0);
+
+    size_t stack_col, col, row, t;
+
     for (size_t i = 1; i <= N; ++i)
     {
-        Pct[i] += 1;
-        Pr[Pct[i]] = i;
-    }
-
-    for (size_t i = 0; i < R.size(); ++i)
-        std::cout << R[i] << " ";
-    std::cout << std::endl;
-
-    //Освободим память
-    H.clear();
-    D.clear();
-    U.clear();
-    I.clear();
-}
-
-void MatrixDecompositor::moveNodeToInterface(size_t index)
-{
-    if (I[index]) return;
-
-//#pragma omp parallel for
-    for (size_t k = 0; k < H[index].size(); ++k)
-    {
-        size_t cur = H[index][k];
-        if (cur == index) continue;
-        std::vector<size_t>::iterator it = std::find(H[cur].begin(),
-                                                     H[cur].end(), index);
-        if (it != H[cur].end())
-            H[cur].erase(it);
-    }
-    H[index].clear();
-    I[index] = true;
-    if (!U[index])
-    {
-        U[index] = true;
-        --unusedcount;
-    }
-    D[0].push_back(index);
-}
-
-void MatrixDecompositor::decomposeSangiovanniVincentelli()
-{
-    size_t cn;
-    std::vector<size_t> as;
-
-    U.assign(N,false);
-    I.assign(N,false);
-
-    D.clear();
-    D.push_back( std::vector<size_t>() );
-    D.push_back( std::vector<size_t>() );
-
-    //Вот это определим сами
-    size_t Nmax = std::max(2, int(N) / 10);
-    size_t Nmin = 0.75*Nmax;
-
-    //Step 1
-    //Найдем initial iterating node
-    //с минимальным количеством связей
-    size_t in = 0, asmin = ULONG_MAX;
-    for (size_t i = 0; i < N; ++i)
-    {
-        if (H[i].size() < asmin)
+        for (size_t q = A.F[i]; q != SPARSE_END; q = A.N[q])
         {
-            asmin = H[i].size();
-            in = i;
+            H[A.C[q]].push_back(i);
         }
     }
 
-    //Step 2-4
-    as = H[in];
-    cn = asmin;
-    D.back().push_back(in);
-    U[in] = true;
-
-    std::vector<size_t> mincontour;
-    size_t minconsize = ULONG_MAX, dsize = 0, domainsize = 1;
-
-    unusedcount = N-1;
-    while (unusedcount > 0)//for (size_t i = 1; i < N; ++i)
+    size_t aug_no = 1, stack_last, stack_end;
+    for (size_t i = 1; i <= N; ++i)
     {
+        if (Pr[i] == 0) {
+            stack[1] = i; stack_last = 1; stack_end = N1;
+            colptrs[i] = 0;
 
-        //Что делать если CN(i-1) == 0?
-        //Делаем так же как и на первом шаге для тех элементов, что не в группах
-        if (cn == 0)
+            while(stack_last > 0) {
+                stack_col = stack[stack_last];
+
+                size_t j;
+                for (j = lookahead[stack_col]; j < H[stack_col].size() &&
+                     row_match[H[stack_col][j]] != 0; ++j){}
+
+                lookahead[stack_col] = j + 1;
+
+                if (j >= H[stack_col].size())
+                {
+                    size_t k;
+                    for (k = colptrs[stack_col]; k < H[stack_col].size(); ++k)
+                    {
+                        t = visited[H[stack_col][k]];
+                        if (t != aug_no && t != 0)
+                            break;
+                    }
+
+                    colptrs[stack_col] = k + 1;
+
+                    if (k >= H[stack_col].size())
+                    {
+                        --stack_last;
+                        stack[--stack_end] = stack_col;
+                        continue;
+                    }
+                    else
+                    {
+                        row = H[stack_col][k];
+                        visited[row] = aug_no;
+                        col = row_match[row];
+                        stack[++stack_last] = col;
+                        colptrs[col] = 0;
+                    }
+                }
+                else
+                {
+                    row = H[stack_col][j];
+                    visited[row] = aug_no;
+                    while (row != 0)
+                    {
+                        col = stack[stack_last--];
+                        t = Pr[col];
+                        Pr[col] = row;
+                        row_match[row] = col;
+                        row = t;
+                    }
+                    ++aug_no;
+                    break;
+                }
+            }
+
+            if (Pr[i] == 0)
+                for (size_t j = stack_end+1; j <= N; ++j)
+                    visited[Pr[stack[j]]] = 0;
+        }
+    }
+}
+
+void MatrixBBDPreordering::SangiovannyVincentelli(
+        VectVectSizet &H, VectVectSizet &D, VectSizet &Is,
+        size_t Nmin, size_t Nmax)
+{
+    size_t Jsize, N = H.size()-1;
+    VectSizet J;
+    VectBool U(N+1,false), I(N+1,false);
+
+    D.clear();
+    D.push_back( VectSizet() ); //D_0
+    D.push_back( VectSizet() ); //D_1
+
+    Is.clear();
+    Is.push_back(0);
+
+    size_t m = 1; //Номер текущего блока
+
+    //Шаг 1:
+    //Найдем вершину с минимальным количеством связей
+    size_t mu = 1, adjmin = ULONG_MAX, hs;
+    for (size_t i = 1; i <= N; ++i)
+    {
+        if ((hs = H[i].size()) < adjmin)
         {
-            if (D.back().size() == 1)
+            adjmin = hs;
+            mu = i;
+        }
+    }
+
+    //И добавим её в D_1
+    J = H[mu];
+    Jsize = adjmin;
+    D[m].push_back(mu);
+    U[mu] = true;
+
+    VectSizet optJ;
+    size_t optJsize = ULONG_MAX, optdomainsize = 0, domainsize = 1;
+
+    size_t unusedcount = N-1;
+    while (unusedcount > 0)
+    {
+        if (Jsize == 0)
+        {
+            D.push_back( VectSizet() ); ++m;
+            Is.push_back(Is.back());
+
+            //Тот же Шаг 1, только ищем среди оставшихся
+            mu = 1, adjmin = ULONG_MAX;
+            for (size_t i = 1; i <= N; ++i)
             {
-                size_t index = D.back()[0];
-                if (!HD[index])
+                if ((!U[i]) && ((hs = H[i].size()) < adjmin))
                 {
-                    moveNodeToInterface(index);
-                    D.pop_back();
+                    adjmin = hs;
+                    mu = i;
                 }
             }
 
-            in = 0, asmin = ULONG_MAX;
-            for (size_t j = 0; j < N; ++j)
-            {
-                if ((!U[j]) && (H[j].size() < asmin))
-                {
-                    asmin = H[j].size();
-                    in = j;
-                }
-            }
-            as = H[in];
-            D.push_back( std::vector<size_t>() );
+            J = H[mu];
 
-            minconsize = ULONG_MAX;
-            mincontour.clear();
-            dsize = 0;
+            optJ.clear();
+            optJsize = ULONG_MAX;
+            optdomainsize = 0;
             domainsize = 0;
         }
         else
         {
-            //Step 6
-            //Выбор next iterating node
-            //используя greedly strategy
+            //Шаг 2:
+            //Из разделителя выбираем элемент, который минимально увеличит
+            //разделитель и добавляем его в текущий блок.
 
-            //Мы должны выбрать IS(i) с минимальным CN(i)
-            std::vector<size_t> asadd, asaddopt;
-            size_t addmin = ULONG_MAX;
-            size_t inindx = 0;
+            VectSizet Jaddopt;
+            size_t Jaddsizemin = ULONG_MAX;
+            size_t muindex = 0;
 
-//#pragma omp parallel for private (asadd)
-            for (size_t j = 0; j < as.size(); ++j)
+            //Перебираем вершины разделителя и для каждой ищем вершины которые
+            //добавятся в разделитель в случае добавления её в блок,
+            //нас интересует минимальное количество новых в разделителе
+            size_t i_end = J.size();
+//#pragma omp parallel for
+            for (size_t i = 0; i < i_end; ++i)
             {
-                size_t cur = as[j];
-                asadd.clear();
+                if (Jaddsizemin == 0) continue; //Костылик для OpenMP
 
-                //Переберем соседей, если они не в IS(0) U ... U IS(i-1), те
-                //соседей которые еще не входят ни в одну группу
-                //и не в AS(i-1), то добавим в asadd
-                size_t adj, addsize = 0;
+                size_t cur = J[i];
+                VectSizet Jadd;
+
+                size_t adj, Jaddsize = 0;
                 for (size_t k = 0; k < H[cur].size(); ++k)
                 {
                     adj = H[cur][k];
                     if ((!U[adj]) &&
-                        (std::find(as.begin(),as.end(), adj) == as.end()))
+                        (std::find(J.begin(),J.end(), adj) == J.end()))
                     {
-                        asadd.push_back(adj);
-                        if(++addsize >= addmin) break;
+                        Jadd.push_back(adj);
+                        if(++Jaddsize >= Jaddsizemin) break;
                     }
                 }
 
+                //Запоминаем новые вершины разделителя для "оптимальной" вершины
 //#pragma omp critical
-                if (asadd.size() < addmin)
+                if (Jaddsize < Jaddsizemin)
                 {
-                    in = cur;
-                    inindx = j;
-                    addmin = asadd.size();
-                    asaddopt = asadd;
-
-                    if (addmin == 0) break;
+                    mu = cur;
+                    muindex = i;
+                    Jaddsizemin = Jaddsize;
+                    Jaddopt = Jadd;
                 }
 
             }
-            as.erase(as.begin()+inindx);
-            as.insert(as.end(),asaddopt.begin(),asaddopt.end());
+
+            //Считаем новый разделитель
+            J.erase(J.begin() + muindex);
+            J.insert(J.end(), Jaddopt.begin(), Jaddopt.end());
         }
 
-        //Step 7-8
-        cn = as.size();
+        Jsize = J.size(); //Запомним размер разделителя
 
-        if (!I[in])
-        {
-            D.back().push_back(in);
-            U[in] = true;
-            --unusedcount;
-            ++domainsize;
-        }
+        //Добавляем вершину в блок
+        D[m].push_back(mu);
+        U[mu] = true;
+        --unusedcount;
+        ++domainsize;
 
+        //Шаг 3:
+        //Определяем наимешьший разделитель при размере блока от Nmin до Nmax
+        //Когда блок достигает максимального размера разделитель переносим в D_0,
+        //а вершины что после последней вершины блока помечаем как еще не рассмотренные
+        //(т.е. возвращаем из блока в исходный граф)
         if (domainsize >= Nmin)
         {
             //Пока <= Nmax запоминаем наименьший контур
-            if (cn <= minconsize)
+            if (Jsize <= optJsize)
             {
-                minconsize = cn;
-                mincontour = as;
-                dsize = domainsize;
+                optJsize = Jsize;
+                optJ = J;
+                optdomainsize = domainsize;
             }
 
             if (domainsize == Nmax)
             {
+                Is[m-1] += optJsize; //Запомним размер локального разделителя
+
                 //Переносим вершины контура в интерфейс
-                for (size_t j = 0; j < mincontour.size(); ++j)
-                    moveNodeToInterface(mincontour[j]);
-
-                //И если были вершины после оптимального контура их переносим в граф обратно
-                if (dsize != domainsize)
+                for (size_t j = 0; j < optJsize; ++j)
                 {
-                    std::vector<size_t> dadd;
-                    dadd.assign(D.back().begin()+dsize, D.back().end());
-                    D.back().resize(dsize);
+                    size_t index = optJ[j];
 
-                    for (size_t j = 0; j < dadd.size(); ++j)
+                    //Сначала уберем связи данной вершины с графом
+                    size_t k_end = H[index].size();
+//#pragma omp parallel for
+                    for (size_t k = 0; k < k_end; ++k)
                     {
-                        if (!I[dadd[j]])
-                        {
-                            U[dadd[j]] = false;
-                            ++unusedcount;
-                        }
+                        size_t cur = H[index][k];
+                        if (cur == index) continue;
+                        VectSizetIterator it = std::find(H[cur].begin(),
+                                                         H[cur].end(), index);
+                        if (it != H[cur].end())
+                            H[cur].erase(it);
                     }
+                    H[index].clear();
+
+                    //Пометим как вершину разделителя
+                    I[index] = true;
+                    if (!U[index])
+                    {
+                        U[index] = true;
+                        --unusedcount;
+                    }
+
+                    //Добавим в общий разделитель
+                    D[0].push_back(index);
                 }
 
-                cn = 0;
+                //Вершины после последней вершины блока переносим в новый блок
+                if (optdomainsize != domainsize)
+                {
+                    D.push_back( VectSizet() ); ++m;
+                    Is.push_back(Is.back());
+
+                    domainsize = 0;
+
+                    //Переносим из текушего блока в новый блок,
+                    //некоторые из них могут оказаться в разделителе, их не трогаем
+                    for (VectSizetIterator it = D[m-1].begin() + optdomainsize,
+                         it_end = D[m-1].end(); it != it_end; ++it)
+                    {
+                        if (!I[*it])
+                        {
+                            D[m].push_back(*it);
+                            ++domainsize;
+                        }
+                    }
+
+                    //Уберем лишние вершины из текущего блока
+                    D[m-1].resize(optdomainsize);
+
+                    //Правим текущий разделитель, убираем вершины которые уже в D_0.
+                    for (VectSizetIterator it = J.begin(); it != J.end(); ++it)
+                    {
+                        if (I[*it] || U[*it])
+                        {
+                            J.erase(it); --it;
+                        }
+                    }
+
+                    Jsize = J.size();
+
+                    optJ.clear();
+                    optJsize = ULONG_MAX;
+                    optdomainsize = 0;
+                }
+                else
+                {
+                    Jsize = 0;
+                }
             }
         }
     }
 }
 
-
-void MatrixDecompositor::printH()
+void MatrixBBDPreordering::SangiovannyVincentelliImproved(
+        VectVectSizet &H, VectVectSizet &D, VectSizet &Is,
+        size_t Nmin, size_t Nmax, size_t Dmax)
 {
-    for (size_t i = 0; i < H.size(); ++i)
+    size_t Jsize, N = H.size()-1;
+    VectSizet J;
+    VectBool U(N+1,false), I(N+1,false);
+
+    D.clear();
+    D.push_back( VectSizet() ); //D_0
+    D.push_back( VectSizet() ); //D_1
+
+    Is.clear();
+    Is.push_back(0);
+
+    size_t m = 1; //Номер текущего блока
+
+    //Шаг 1:
+    //Найдем вершину с минимальным количеством связей
+    size_t mu = 1, adjmin = ULONG_MAX, hs;
+    for (size_t i = 1; i <= N; ++i)
     {
-        for (size_t j = 0; j < H[i].size(); ++j)
-            std::cout << H[i][j] << "\t";
-        std::cout << std::endl;
+        if ((hs = H[i].size()) < adjmin)
+        {
+            adjmin = hs;
+            mu = i;
+        }
+    }
+
+    //И добавим её в D_1
+    J = H[mu];
+    Jsize = adjmin;
+    D[m].push_back(mu);
+    U[mu] = true;
+
+    VectSizet optJ;
+    size_t optJsize = ULONG_MAX, optdomainsize = 0, domainsize = 1;
+
+    size_t unusedcount = N-1;
+    while (unusedcount > 0)
+    {
+        if (Jsize == 0)
+        {
+            D.push_back( VectSizet() ); ++m;
+            Is.push_back(Is.back());
+
+            //Тот же Шаг 1, только ищем среди оставшихся
+            mu = 1, adjmin = ULONG_MAX;
+            for (size_t i = 1; i <= N; ++i)
+            {
+                if ((!U[i]) && ((hs = H[i].size()) < adjmin))
+                {
+                    adjmin = hs;
+                    mu = i;
+                }
+            }
+
+            J = H[mu];
+
+            optJ.clear();
+            optJsize = ULONG_MAX;
+            optdomainsize = 0;
+            domainsize = 0;
+        }
+        else
+        {
+            //Шаг 2:
+            //Из разделителя выбираем элемент, который минимально увеличит
+            //разделитель и добавляем его в текущий блок.
+
+            VectSizet Jaddopt;
+            size_t Jaddsizemin = ULONG_MAX;
+            size_t muindex = 0;
+
+            //Перебираем вершины разделителя и для каждой ищем вершины которые
+            //добавятся в разделитель в случае добавления её в блок,
+            //нас интересует минимальное количество новых в разделителе
+            size_t i_end = J.size();
+#pragma omp parallel for
+            for (size_t i = 0; i < i_end; ++i)
+            {
+                if (Jaddsizemin == 0) continue; //Костылик для OpenMP
+
+                size_t cur = J[i];
+                VectSizet Jadd;
+
+                size_t adj, Jaddsize = 0;
+                for (size_t k = 0; k < H[cur].size(); ++k)
+                {
+                    adj = H[cur][k];
+                    if ((!U[adj]) &&
+                        (std::find(J.begin(),J.end(), adj) == J.end()))
+                    {
+                        Jadd.push_back(adj);
+                        if(++Jaddsize >= Jaddsizemin) break;
+                    }
+                }
+
+                //Запоминаем новые вершины разделителя для "оптимальной" вершины
+#pragma omp critical
+                if (Jaddsize < Jaddsizemin)
+                {
+                    mu = cur;
+                    muindex = i;
+                    Jaddsizemin = Jaddsize;
+                    Jaddopt = Jadd;
+                }
+
+            }
+
+            //Считаем новый разделитель
+            J.erase(J.begin() + muindex);
+            J.insert(J.end(), Jaddopt.begin(), Jaddopt.end());
+        }
+
+        Jsize = J.size(); //Запомним размер разделителя
+
+        //Добавляем вершину в блок
+        D[m].push_back(mu);
+        U[mu] = true;
+        --unusedcount;
+        ++domainsize;
+
+        //Шаг 3:
+        //Определяем наимешьший разделитель при размере блока от Nmin до Nmax
+        //Когда блок достигает максимального размера разделитель переносим в D_0,
+        //а вершины что после последней вершины блока помечаем как еще не рассмотренные
+        //(т.е. возвращаем из блока в исходный граф)
+        if (domainsize >= Nmin)
+        {
+            //Пока <= Nmax запоминаем наименьший контур
+            if (Jsize <= optJsize)
+            {
+                optJsize = Jsize;
+                optJ = J;
+                optdomainsize = domainsize;
+            }
+
+            if (domainsize == Nmax)
+            {
+                Is[m-1] += optJsize; //Запомним размер локального разделителя
+
+                //Переносим вершины контура в интерфейс
+                for (size_t j = 0; j < optJsize; ++j)
+                {
+                    size_t index = optJ[j];
+
+                    //Сначала уберем связи данной вершины с графом
+                    size_t k_end = H[index].size();
+#pragma omp parallel for
+                    for (size_t k = 0; k < k_end; ++k)
+                    {
+                        size_t cur = H[index][k];
+                        if (cur == index) continue;
+                        VectSizetIterator it = std::find(H[cur].begin(),
+                                                         H[cur].end(), index);
+                        if (it != H[cur].end())
+                            H[cur].erase(it);
+                    }
+                    H[index].clear();
+
+                    //Пометим как вершину разделителя
+                    I[index] = true;
+                    if (!U[index])
+                    {
+                        U[index] = true;
+                        --unusedcount;
+                    }
+
+                    //Добавим в общий разделитель
+                    D[0].push_back(index);
+                }
+
+                //Вершины после последней вершины блока возвращаем в граф
+                if (optdomainsize != domainsize)
+                {
+                    //Возвращаем в граф, помечая как не использованные
+                    //некоторые из них могут оказаться в разделителе, их не трогаем
+                    for (VectSizetIterator it = D[m].begin() + optdomainsize,
+                         it_end = D[m].end(); it != it_end; ++it)
+                    {
+                        if (!I[*it])
+                        {
+                            U[*it] = false;
+                            ++unusedcount;
+                        }
+                    }
+
+                    //Уберем их из блока
+                    D[m].resize(optdomainsize);
+                }
+
+                //Если размер разделителя достиг максимума, то неиспользованные
+                //вершины переносим отдельный блок
+                if (D[0].size() >= Dmax)
+                {
+                    D.push_back( VectSizet() ); ++m;
+                    Is.push_back(Is.back());
+
+                    for (size_t i = 1; i <= N; ++i)
+                    {
+                        if (!U[i]) D[m].push_back(i);
+                    }
+
+                    break; //Выходим, т.к. все вершины уже стали используемыми
+                }
+
+                Jsize = 0;
+            }
+        }
     }
 }
 
 #endif // !DECOMPOSITOR_H
+

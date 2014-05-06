@@ -24,11 +24,9 @@ for line in f:
 	r = int(r)-1
 	c = int(c)-1
 	M[r].append("%s %s" % (str(c+1), x))
+	zap += 1
 	if r != c and sim:
 		M[c].append("%s %s" % (str(r+1), x))
-	if sim:
-		zap += 2
-	else:
 		zap += 1
 
 print(zap, float(zap)/(float(H*W))*100.)
@@ -48,9 +46,8 @@ fo = open("vector.txt",'w')
 
 for x in xrange(H):
 	fo.write("%s\t" % str((x-H/2)/float(H)))
-
 fo.close()
 
-res = open("res.csv","a")	
-res.write("\n%s; %s; %.2f; " % (sys.argv[1].split('/')[2].split('.')[0], str(W), float(zap)/(float(H*W))*100.) )
-res.close()
+#res = open("res.csv","a")	
+#res.write("\n%s; %s; %.2f; " % (sys.argv[1].split('/')[2].split('.')[0], str(W), float(zap)/(float(H*W))*100.) )
+#res.close()

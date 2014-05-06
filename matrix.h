@@ -23,6 +23,8 @@ public:
     Vector(std::vector<double> &V1);
     Vector(const char *file);
 
+    ~Vector(){}
+
     std::vector<double> V;
     size_t H;
 
@@ -34,13 +36,19 @@ public:
     void print() const;
     void permute(std::vector<size_t>& P);
 
+    double normInf();
+
     friend Vector operator +(const Vector &V1, const Vector &V2);
     friend Vector operator -(const Vector &V1, const Vector &V2);
 
     friend Vector& operator -=(Vector &V1, const Vector &V2);
     friend Vector& operator +=(Vector &V1, const Vector &V2);
 
+    double& operator[](size_t i);
+
     friend Vector operator *(const SparseMatrix &S, const Vector &V);
+
+    void save2file(const char* file);
 };
 
 class Matrix
@@ -57,13 +65,13 @@ public:
     size_t H;
     size_t W;
 
-    double get(size_t row, size_t col) const;
-    void set(size_t row, size_t col, double value);
     void zeros(size_t h, size_t w);
     void print() const;
 
     void swapRow(size_t r1, size_t r2);
     void swapCol(size_t c1, size_t c2);
+
+    double& operator()(size_t row, size_t col);
 
     friend Matrix operator +(const Matrix &M1, const Matrix &M2);
     friend Matrix operator -(const Matrix &M1, const Matrix &M2);

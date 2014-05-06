@@ -38,7 +38,7 @@ Matrix::Matrix(const char *file)
 
             if (c != SPARSE_END) {
                 in >> x;
-                set(r, c, x);
+                M[W*(r-1)+c] = x;
             } else {
                 break;
             }
@@ -62,16 +62,6 @@ Matrix::Matrix(const SparseMatrix &S)
     }
 }
 
-double Matrix::get(size_t row, size_t col) const
-{
-    return M[W*(row-1)+col];
-}
-
-void Matrix::set(size_t row, size_t col, double value)
-{
-    M[W*(row-1)+col] = value;
-}
-
 void Matrix::zeros(size_t h, size_t w)
 {
     H = h;
@@ -86,10 +76,10 @@ void Matrix::print() const
     {
         for (size_t j = 1; j <= W; ++j)
         {
-            if (fabs(get(i,j)) < 1e-10)
-                std::cout << "0\t";
-            else
-                std::cout << get(i,j) << '\t';
+//            if (fabs(get(i,j)) < 1e-10)
+//                std::cout << "0\t";
+//            else
+                std::cout << M[W*(i-1)+j] << '\t';
         }
         std::cout << ";\n";
     }
@@ -116,6 +106,11 @@ void Matrix::swapCol(size_t c1, size_t c2)
         M[h1] = M[h2];
         M[h2] = t;
     }
+}
+
+double& Matrix::operator()(size_t row, size_t col)
+{
+    return M[W*(row-1)+col];
 }
 
 Matrix operator +(const Matrix &M1, const Matrix &M2)
@@ -389,7 +384,7 @@ void Vector::zeros(size_t h)
 {
     H = h;
     V.resize(H+1);
-    memset(&V[0], 0, (H+1)*sizeof(double));
+    V.assign(H+1, 0.0);
 }
 
 void Vector::resize(size_t h)
@@ -410,6 +405,31 @@ void Vector::permute(std::vector<size_t>& P)
         Vtemp[P[i]] = V[i];
 
     V = Vtemp;
+}
+
+double Vector::normInf()
+{
+    double norm = 0;
+
+    for (size_t i = 1; i <= H; ++i)
+        norm = std::max(norm, fabs(V[i]));
+
+    return norm;
+}
+
+void Vector::save2file(const char *file)
+{
+    std::ofstream out(file);
+
+    for (size_t i = 1; i <= H; ++i)
+        out << V[i] << '\n';
+
+    out.close();
+}
+
+double& Vector::operator [](size_t i)
+{
+    return V[i];
 }
 
 Vector operator +(const Vector &V1, const Vector &V2)
@@ -459,5 +479,4 @@ Vector& operator +=(Vector &V1, const Vector &V2)
 
     return V1;
 }
-
 
