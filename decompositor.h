@@ -541,10 +541,10 @@ void MatrixBBDPreordering::SangiovannyVincentelliImproved(
             //добавятся в разделитель в случае добавления её в блок,
             //нас интересует минимальное количество новых в разделителе
             size_t i_end = J.size();
-#pragma omp parallel for
+//#pragma omp parallel for
             for (size_t i = 0; i < i_end; ++i)
             {
-                if (Jaddsizemin == 0) continue; //Костылик для OpenMP
+                //if (Jaddsizemin == 0) continue; //Костылик для OpenMP
 
                 size_t cur = J[i];
                 VectSizet Jadd;
@@ -562,13 +562,15 @@ void MatrixBBDPreordering::SangiovannyVincentelliImproved(
                 }
 
                 //Запоминаем новые вершины разделителя для "оптимальной" вершины
-#pragma omp critical
+//#pragma omp critical
                 if (Jaddsize < Jaddsizemin)
                 {
                     mu = cur;
                     muindex = i;
                     Jaddsizemin = Jaddsize;
                     Jaddopt = Jadd;
+
+                    if (Jaddsizemin == 0) break;
                 }
 
             }
@@ -612,7 +614,7 @@ void MatrixBBDPreordering::SangiovannyVincentelliImproved(
 
                     //Сначала уберем связи данной вершины с графом
                     size_t k_end = H[index].size();
-#pragma omp parallel for
+//#pragma omp parallel for
                     for (size_t k = 0; k < k_end; ++k)
                     {
                         size_t cur = H[index][k];

@@ -48,6 +48,7 @@ for x in xrange(H):
 	fo.write("%s\t" % str((x-H/2)/float(H)))
 fo.close()
 
-#res = open("res.csv","a")	
-#res.write("\n%s; %s; %.2f; " % (sys.argv[1].split('/')[2].split('.')[0], str(W), float(zap)/(float(H*W))*100.) )
-#res.close()
+res = open("res.csv","a")
+#res = open("dec.csv","a")	
+res.write("%s; %s; %.2f%%; " % (sys.argv[1].split('/')[2].split('.')[0], str(W), float(zap)/(float(H*W))*100.) )
+res.close();

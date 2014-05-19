@@ -12,6 +12,8 @@
 #include <sparsematrix.h>
 //class SparseMatrix;
 
+#define MATRIX_OPTIMIZATION
+
 #define SPARSE_END 0
 
 class Vector
@@ -44,7 +46,7 @@ public:
     friend Vector& operator -=(Vector &V1, const Vector &V2);
     friend Vector& operator +=(Vector &V1, const Vector &V2);
 
-    double& operator[](size_t i);
+    double& operator()(size_t i);
 
     friend Vector operator *(const SparseMatrix &S, const Vector &V);
 

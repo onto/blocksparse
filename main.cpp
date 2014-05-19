@@ -4,7 +4,7 @@
 #define TIME_LOG
 
 #ifndef CSV_LOG
-//#define CSV_LOG
+#define CSV_LOG
 #endif
 
 #endif
@@ -89,13 +89,13 @@ int main(int argc, char *argv[3])
 #endif
 
 #ifdef CSV_LOG
-        out << tdec << "; " << tsol << "; " << tres << "; ";
+        out << /*tdec << "; " << tsol << "; " <<*/ tres << "; " << endl;
 #endif
 #endif
 
         //X.save2file("solution.txt");
 
-        cout << "Ошибка: " << MatrixOperations::MaxResidual(M, B, X) << endl;
+        cout << "Ошибка: " << MatrixOperations::MaxResidual(M, B, X) << endl << endl;
 
         cout << X.V[1] << endl;
         cout << X.V[2] << endl;
@@ -164,16 +164,16 @@ int main(int argc, char *argv[3])
 #endif
 
 #ifdef CSV_LOG
-        out << tper << "; " << tdec << "; " << tsol << "; " << tres << "; ";
+        out << /*tper << "; " << tdec << "; " << tsol << "; " <<*/ tres << "; ";
 #endif
 #endif
 
         //X.save2file("solution.txt");
 
-        cout << "Ошибка: " << MatrixOperations::MaxResidual(M, B, X) << endl;
+        cout << "Ошибка: " << MatrixOperations::MaxResidual(M, B, X) << endl << endl;
 
-        cout << X.V[1] << endl;
-        cout << X.V[2] << endl;
+        //cout << X.V[1] << endl;
+        //cout << X.V[2] << endl;
 
     }
     else if (type == 3) //Решение с плотной матрицей

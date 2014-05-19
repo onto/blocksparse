@@ -375,7 +375,7 @@ bool MatrixOperations::LUTriang(Matrix &M, LUPM &_M)
     _M.M = M;
     _M.P.resize(H+H+1);
     _M.Pt.resize(H+H+1);
-#pragma omp parallel for
+
     for (size_t i = 1; i <= H; ++i) _M.P[i] = _M.P[H+i] = i;
 
     for (size_t k = 1; k < H; ++k)
@@ -412,7 +412,6 @@ bool MatrixOperations::LUTriang(Matrix &M, LUPM &_M)
         double diag = _M.M.M[_M.M.W*(k-1)+k];
 
         size_t h1 = H*(k-1);
-#pragma omp parallel for
         for (size_t i = k+1; i <= H; ++i)
         {
             size_t h = H*(i-1);
@@ -426,10 +425,7 @@ bool MatrixOperations::LUTriang(Matrix &M, LUPM &_M)
     }
 
     for (size_t i = 1; i <= H; ++i)
-    {
-        _M.Pt[_M.P[i]] = i;
-        _M.Pt[H+_M.P[H+i]] = i;
-    }
+        _M.Pt[_M.P[i]] = _M.Pt[H+_M.P[H+i]] = i;
 
     return true;
 }
@@ -511,7 +507,7 @@ bool MatrixOperations::BlockMatrixFactorization(BBDSparseMatrix &M,
 
     //Раскладываем A_i
     _M.Alu.resize(Nb);
-#pragma omp parallel for
+#pragma omp parallel for schedule(dynamic)
     for (size_t i = 0; i < Nb; ++i)
     {
         LUTriang(M.A[i], _M.Alu[i]);
@@ -526,23 +522,23 @@ bool MatrixOperations::BlockMatrixFactorization(BBDSparseMatrix &M,
 #endif
 
     //Рассчитываем inv(A_i)*B_i = Bh_i
-    for (size_t i = 0; i < Nb; ++i)
-        _M.Bh.push_back(Matrix(M.B[i]));
-
-#pragma omp parallel for
+    _M.Bh.resize(Nb);
+#pragma omp parallel for schedule(dynamic)
     for (size_t i = 0; i < Nb; ++i)
     {
+        _M.Bh[i] = Matrix(M.B[i]);
+
         size_t H = _M.Bh[i].H;
         Vector b(H), x(H);
         for (size_t j = 1; j <= M.BBDS.Is[i]; ++j)
         {
             for (size_t k = 1; k <= H; ++k)
-                b[k] = _M.Bh[i](k,j);
+                b(k) = _M.Bh[i](k,j);
 
             Solve(_M.Alu[i], b, x);
 
             for (size_t k = 1; k <= H; ++k)
-                _M.Bh[i](k, j) = x[k];
+                _M.Bh[i](k,j) = x(k);
         }
     }
 
@@ -588,20 +584,21 @@ bool MatrixOperations::Solve(FactorizedBBDSparseMatrix &M, Vector &B,
     size_t Nb = M.Nb, N = M.N;
 
     std::vector< Vector >bh(Nb);
-#pragma omp parallel for
+#pragma omp parallel for schedule(dynamic)
     for (size_t ib = 0; ib < Nb; ++ib)
     {
         size_t b0 = M.BBDS.R[ib], bdim = M.BBDS.R[ib+1]-b0;
         Vector b(bdim);
         for (size_t i = 1; i <= bdim; ++i)
-            b[i] = B[M.BBDS.Pr[b0+i]];//С учетом перестановки
+            b(i) = B(M.BBDS.Pr[b0+i]);//С учетом перестановки
 
         Solve(M.Alu[ib], b, bh[ib]);
     }
 
     Vector g(M.H.M.H); size_t b0 = M.BBDS.R[Nb];
+//#pragma omp parallel for
     for (size_t i = 1; i <= M.H.M.H; ++i)
-        g[i] = B[M.BBDS.Pr[b0+i]];
+        g(i) = B(M.BBDS.Pr[b0+i]);
 
     for (size_t i = 0; i < Nb; ++i)
     {
@@ -614,7 +611,7 @@ bool MatrixOperations::Solve(FactorizedBBDSparseMatrix &M, Vector &B,
     X.resize(N);
     Vector Xt(N);
 
-//#pragma omp parallel for
+#pragma omp parallel for
     for (size_t ib = 0; ib < Nb; ++ib)
     {
         size_t bb = M.BBDS.R[ib]+1, bdim = M.BBDS.R[ib+1]-bb+1;
@@ -626,8 +623,9 @@ bool MatrixOperations::Solve(FactorizedBBDSparseMatrix &M, Vector &B,
 
     memcpy(&(Xt.V[M.BBDS.R[Nb]+1]),&(X_q.V[1]),M.H.M.H*sizeof(double));
 
+//#pragma omp parallel for
     for (size_t i = 1; i <= N; ++i)
-        X[i] = Xt[M.BBDS.Pct[i]];
+        X(i) = Xt(M.BBDS.Pct[i]);
 
     return true;
 }

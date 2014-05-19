@@ -98,7 +98,6 @@ void Matrix::swapRow(size_t r1, size_t r2)
 
 void Matrix::swapCol(size_t c1, size_t c2)
 {
-#pragma omp parallel for
     for (size_t i = 1; i <= H; ++i)
     {
         size_t h1 = W*(i-1)+c1, h2 = W*(i-1)+c2;
@@ -115,7 +114,9 @@ double& Matrix::operator()(size_t row, size_t col)
 
 Matrix operator +(const Matrix &M1, const Matrix &M2)
 {
+#ifndef MATRIX_OPTIMIZATION
     if ((M1.H != M2.H) || (M1.W != M2.W)) {} // надо бы бросить исключение
+#endif
 
     Matrix OM(M1);
 
@@ -128,7 +129,9 @@ Matrix operator +(const Matrix &M1, const Matrix &M2)
 
 Matrix operator -(const Matrix &M1, const Matrix &M2)
 {
+#ifndef MATRIX_OPTIMIZATION
     if ((M1.H != M2.H) || (M1.W != M2.W)) {} // надо бы бросить исключение
+#endif
 
     Matrix OM(M1);
 
@@ -141,7 +144,9 @@ Matrix operator -(const Matrix &M1, const Matrix &M2)
 
 Matrix& operator -=(Matrix &M1, const Matrix &M2)
 {
+#ifndef MATRIX_OPTIMIZATION
     if ((M1.H != M2.H) || (M1.W != M2.W)) {} // надо бы бросить исключение
+#endif
 
 #pragma omp parallel for
     for (size_t i = 1; i < M1.M.size(); ++i)
@@ -152,7 +157,9 @@ Matrix& operator -=(Matrix &M1, const Matrix &M2)
 
 Matrix& operator +=(Matrix &M1, const Matrix &M2)
 {
+#ifndef MATRIX_OPTIMIZATION
     if ((M1.H != M2.H) || (M1.W != M2.W)) {} // надо бы бросить исключение
+#endif
 
 #pragma omp parallel for
     for (size_t i = 1; i < M1.M.size(); ++i)
@@ -163,7 +170,9 @@ Matrix& operator +=(Matrix &M1, const Matrix &M2)
 
 Matrix operator *(const Matrix &M1, const Matrix &M2)
 {
+#ifndef MATRIX_OPTIMIZATION
     if (M1.W != M2.H) {} // надо бы бросить исключение
+#endif
 
     Matrix OM(M1.H, M2.W);
 
@@ -184,7 +193,9 @@ Matrix operator *(const Matrix &M1, const Matrix &M2)
 
 Vector operator *(const Matrix &M, const Vector &V)
 {
+#ifndef MATRIX_OPTIMIZATION
     if (M.W != V.H) {} // надо бы бросить исключение
+#endif
 
     Vector OV(M.H);
 
@@ -201,7 +212,9 @@ Vector operator *(const Matrix &M, const Vector &V)
 
 Matrix operator *(const SparseMatrix &S, const Matrix &M)
 {
+#ifndef MATRIX_OPTIMIZATION
     if (S.W != M.H) {} // надо бы бросить исключение
+#endif
 
     Matrix OM(S.H,M.W);
 
@@ -226,7 +239,9 @@ Matrix operator *(const SparseMatrix &S, const Matrix &M)
 
 Matrix operator *(const Matrix &M, const SparseMatrix &S)
 {
+#ifndef MATRIX_OPTIMIZATION
     if (M.W != S.H) {} // надо бы бросить исключение
+#endif
 
     Matrix OM(M.H,S.W);
 
@@ -250,7 +265,9 @@ Matrix operator *(const Matrix &M, const SparseMatrix &S)
 
 Vector operator *(const SparseMatrix &S, const Vector &V)
 {
+#ifndef MATRIX_OPTIMIZATION
     if (S.W != V.H) {} // надо бы бросить исключение
+#endif
 
     Vector OV(S.H);
 
@@ -264,7 +281,9 @@ Vector operator *(const SparseMatrix &S, const Vector &V)
 
 Matrix operator +(const SparseMatrix &S, const Matrix &M)
 {
+#ifndef MATRIX_OPTIMIZATION
     if ((S.H != M.H) || (S.W != M.W)) {} // надо бы бросить исключение
+#endif
 
     Matrix OM(M);
 
@@ -286,7 +305,9 @@ Matrix operator +(const Matrix &M, const SparseMatrix &S)
 
 Matrix& operator +=(Matrix &M, const SparseMatrix &S)
 {
+#ifndef MATRIX_OPTIMIZATION
     if ((S.H != M.H) || (S.W != M.W)) {} // надо бы бросить исключение
+#endif
 
 #pragma omp parallel for
     for (size_t i = 1; i <= S.H; ++i)
@@ -301,7 +322,9 @@ Matrix& operator +=(Matrix &M, const SparseMatrix &S)
 
 Matrix operator -(const SparseMatrix &S, const Matrix &M)
 {
+#ifndef MATRIX_OPTIMIZATION
     if ((S.H != M.H) || (S.W != M.W)) {} // надо бы бросить исключение
+#endif
 
     Matrix OM(M);
 
@@ -321,7 +344,9 @@ Matrix operator -(const SparseMatrix &S, const Matrix &M)
 
 Matrix operator -(const Matrix &M, const SparseMatrix &S)
 {
+#ifndef MATRIX_OPTIMIZATION
     if ((S.H != M.H) || (S.W != M.W)) {} // надо бы бросить исключение
+#endif
 
     Matrix OM(M);
 
@@ -404,7 +429,7 @@ void Vector::permute(std::vector<size_t>& P)
     for (size_t i = 1; i <= H; ++i)
         Vtemp[P[i]] = V[i];
 
-    V = Vtemp;
+    V.swap(Vtemp);
 }
 
 double Vector::normInf()
@@ -427,42 +452,45 @@ void Vector::save2file(const char *file)
     out.close();
 }
 
-double& Vector::operator [](size_t i)
+double& Vector::operator()(size_t i)
 {
     return V[i];
 }
 
 Vector operator +(const Vector &V1, const Vector &V2)
 {
+#ifndef MATRIX_OPTIMIZATION
     if (V1.H != V2.H) {}
+#endif
 
-    Vector OV(V1.H);
+    Vector OV(V1);
 
-#pragma omp parallel for
-    for (size_t i = 0; i <= V1.H; ++i)
-        OV.V[i] = V1.V[i] + V2.V[i];
+    for (size_t i = 1; i <= V1.H; ++i)
+        OV.V[i] += V2.V[i];
 
     return OV;
 }
 
 Vector operator -(const Vector &V1, const Vector &V2)
 {
+#ifndef MATRIX_OPTIMIZATION
     if (V1.H != V2.H) {}
+#endif
 
-    Vector OV(V1.H);
+    Vector OV(V1);
 
-#pragma omp parallel for
     for (size_t i = 0; i <= V1.H; ++i)
-        OV.V[i] = V1.V[i] - V2.V[i];
+        OV.V[i] -= V2.V[i];
 
     return OV;
 }
 
 Vector& operator -=(Vector &V1, const Vector &V2)
 {
+#ifndef MATRIX_OPTIMIZATION
     if (V1.H != V2.H) {}
+#endif
 
-#pragma omp parallel for
     for (size_t i = 0; i <= V1.H; ++i)
         V1.V[i] -= V2.V[i];
 
@@ -471,9 +499,10 @@ Vector& operator -=(Vector &V1, const Vector &V2)
 
 Vector& operator +=(Vector &V1, const Vector &V2)
 {
+#ifndef MATRIX_OPTIMIZATION
     if (V1.H != V2.H) {}
+#endif
 
-#pragma omp parallel for
     for (size_t i = 0; i <= V1.H; ++i)
         V1.V[i] += V2.V[i];
 

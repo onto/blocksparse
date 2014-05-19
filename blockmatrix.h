@@ -8,6 +8,10 @@
 #include "sparsematrix.h"
 #include "decompositor.h"
 
+#ifndef LOG
+//#define LOG
+#endif
+
 struct BBDSparseMatrix
 {
     std::vector< SparseMatrix > A;   // A_i - r_i x r_i
@@ -31,21 +35,60 @@ struct BBDSparseMatrix
     {
         N = M.H;
 
+#ifdef LOG
+        std::ofstream out("dec.csv", std::ios_base::app);
+#ifdef _OPENMP
+        double t = omp_get_wtime();
+        double t1 = t;
+#endif
+#endif
+
         //Определяем перестановку и структуру
-//        MatrixBBDPreordering::BBDDecompose(M, BBDS, SV, 0.01875*N, 0.025*N, 0.025*N);
-//        showBlocksInfo();
-//        MatrixBBDPreordering::BBDDecompose(M, BBDS, SV, 0.0375*N, 0.05*N, 0.05*N);
-//        showBlocksInfo();
+/*
         MatrixBBDPreordering::BBDDecompose(M, BBDS, SV, 0.075*N, 0.1*N, 0.5*N);
         printBlocksInfo();
 
-//        MatrixBBDPreordering::BBDDecompose(M, BBDS, SVI, 0.01875*N, 0.025*N, 0.025*N);
-//        showBlocksInfo();
-//        MatrixBBDPreordering::BBDDecompose(M, BBDS, SVI, 0.0375*N, 0.05*N, 0.05*N);
-//        showBlocksInfo();
+#ifdef LOG
+        out << BBDS.R[BBDS.R.size()-1]-BBDS.R[BBDS.R.size()-2] << ";";
+
+        t = omp_get_wtime();
+        out << t - t1 << ";";
+        t1 = t;
+#endif
+
         MatrixBBDPreordering::BBDDecompose(M, BBDS, SVI, 0.075*N, 0.1*N, 0.5*N);
         printBlocksInfo();
 
+#ifdef LOG
+        out << BBDS.R[BBDS.R.size()-1]-BBDS.R[BBDS.R.size()-2] << ";";
+
+        t = omp_get_wtime();
+        out << t - t1 << ";";
+        t1 = t;
+#endif
+
+        MatrixBBDPreordering::BBDDecompose(M, BBDS, SV, 0.0375*N, 0.05*N, 0.5*N);
+        printBlocksInfo();
+
+#ifdef LOG
+        out << BBDS.R[BBDS.R.size()-1]-BBDS.R[BBDS.R.size()-2] << ";";
+
+        t = omp_get_wtime();
+        out << t - t1 << ";";
+        t1 = t;
+#endif
+*/
+        MatrixBBDPreordering::BBDDecompose(M, BBDS, SVI, 0.0375*N, 0.05*N, 0.5*N);
+        printBlocksInfo();
+/*
+#ifdef LOG
+        out << BBDS.R[BBDS.R.size()-1]-BBDS.R[BBDS.R.size()-2] << ";";
+
+        t = omp_get_wtime();
+        out << t - t1 << ";\n";
+        t1 = t;
+#endif
+*/
         //Переставляем столбцы исходной матрицы
         for (size_t i = 1; i <= N; ++i)
         {
@@ -179,7 +222,8 @@ struct BBDSparseMatrix
 
         std::cout << "Максимальный блок A: " << maxBlock << std::endl;
         std::cout << "Размер блока D: " << BBDS.R[BBDS.R.size()-1]-BBDS.R[BBDS.R.size()-2] << std::endl;
-        std::cout << std::endl;
+        //std::cout << std::endl;
+
     }
 };
 
